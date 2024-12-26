@@ -7,6 +7,7 @@ function App() {
   let [playlist, setPlaylist] = useState<Metadata[]>([]);
   let [url, setUrl] = useState("");
   let [audioData, setAudioData] = useState<Audio | null>(null);
+  let [loading, setLoading] = useState(false);
   
   let thumbnail;
   let audio;
@@ -20,7 +21,6 @@ function App() {
     }
   }
 
-
   useEffect(() => {
     (async () => {
       setPlaylist(await getPlaylistMetadata());
@@ -28,32 +28,49 @@ function App() {
   }, []);
 
   async function _addPlaylist(url: string) {
+    setLoading(true);
     let audio = await addPlaylist(url);
+    setLoading(false);
     setPlaylist([...playlist, audio.metadata]);
+    setAudioData(audio);
   }
 
   async function _loadAudio(id: number) {
+    setLoading(true);
     let audio = await loadAudio(id);
+    setLoading(false);
     setAudioData(audio);
   }
 
   return (
     <main className="bg-gray-900 text-white h-screen flex flex-col">
-      <div className="flex">
-        <form className="flex flex-col w-3/5 mx-auto" onSubmit={e => {e.preventDefault(); _addPlaylist(url);}}>
-          <input onChange={(e) => setUrl(e.target.value)} type="url" placeholder="YouTube url" className="p-2 px-3 rounded-lg bg-gray-800 text-white outline-none" />
-        </form>
+      <div className="flex justify-center p-4">
+      <form className="flex flex-col w-full" onSubmit={e => {e.preventDefault(); _addPlaylist(url);}}>
+        <input onChange={(e) => setUrl(e.target.value)} type="url" placeholder="YouTube url" className="p-2 px-3 rounded-lg bg-gray-800 text-white outline-none" />
+      </form>
       </div>
-      <div className="flex">
-        <div className="flex flex-col w-1/5">
-          { playlist.map((metadata, index) => (<button key={index} onClick={() => _loadAudio(metadata.id)} className="p-2 px-3 bg-transparent flex flex-col items-center"><span className="text-white">{metadata.title}</span><span className="text-gray-400 text-sm">{metadata.author}</span></button>)) }
+      <div className="flex-grow flex overflow-auto">
+      <div className="flex flex-col w-3/5 mx-auto">
+        { playlist.map((metadata, index) => (
+        <button key={index} onClick={() => _loadAudio(metadata.id)} className="p-2 px-3 bg-transparent flex flex-col items-center border-b border-gray-700">
+          <span className="text-white">{metadata.title}</span>
+          <span className="text-gray-400 text-sm">{metadata.author}</span>
+        </button>
+        )) }
+      </div>
+      </div>
+      <div className="p-4">
+      { loading ? (
+        <div className="flex flex-col items-center">
+        <div className="w-1/4 mb-4 bg-gray-700 animate-pulse h-48 rounded-lg"></div>
+        <div className="w-full bg-gray-700 animate-pulse h-12 rounded-lg"></div>
         </div>
-        <div className="flex-grow">
-          { audioData && <div className="flex flex-col items-center">
-            <img src={thumbnail} alt="thumbnail" className="w-1/2" />
-            <audio src={audio} controls></audio>
-          </div> }
+      ) : (
+        audioData && <div className="flex flex-col items-center">
+        <img src={thumbnail} alt="thumbnail" className="w-1/4 mb-4" />
+        <audio src={audio} controls className="w-full"></audio>
         </div>
+      )}
       </div>
     </main>
   );
