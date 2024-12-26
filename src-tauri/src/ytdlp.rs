@@ -31,6 +31,10 @@ pub struct YouTubeFormat {
 #[derive(Debug)]
 pub enum Error {
     Unknown,
+    NotFound,
+    PrivateVideo,
+    BadLink,
+    NotAudio,
 }
 
 impl YtDlp {
@@ -39,6 +43,9 @@ impl YtDlp {
     }
 
     pub async fn get_metadata(&self, url: String) -> Result<YouTubeMetadata, Error> {
+        if !url.starts_with("https://www.youtube.com/watch?v=") && !url.starts_with("https://youtu.be/") && !url.starts_with("https://youtube.com/watch?v=") {
+            return Err(Error::BadLink);
+        }
         let mut cmd = Command::new(&self.path);
         cmd.args(vec![
             "--dump-json".to_string(),
@@ -47,9 +54,15 @@ impl YtDlp {
         let output = cmd.output().await.map_err(|_| Error::Unknown)?;
         let stderr = String::from_utf8(output.stderr).map_err(|_| Error::Unknown)?;
         if !output.status.success() && !stderr.is_empty() {
-            return Err(Error::Unknown);
+            return if stderr.contains("Video unavailable") || stderr.contains("Incomplete YouTube ID") {
+                Err(Error::NotFound)
+            } else if stderr.contains("Private video") {
+                Err(Error::PrivateVideo)
+            } else {
+                Err(Error::Unknown)
+            };
         }
-        let stdout = String::from_utf8(output.stdout).unwrap();
+        let stdout = String::from_utf8(output.stdout).map_err(|_| Error::Unknown)?;
         serde_json::from_str(&stdout).map_err(|_| Error::Unknown)
     }
 }
@@ -70,9 +83,8 @@ impl YouTubeMetadata {
             .filter(|x| x.ext == "webm")
             .next();
         if format.is_none() {
-            return Err(Error::Unknown);
+            return Err(Error::NotAudio);
         }
-
         Ok(UrledData {
             audio: format.unwrap().url.clone(),
             thumbnail: self.thumbnail.clone(),
