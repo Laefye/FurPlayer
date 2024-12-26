@@ -1,9 +1,8 @@
 use std::{path::Path, sync::Arc, time::Duration};
 
-use serde::{Deserialize, Serialize};
 use tokio::{fs::File, io::AsyncWriteExt, sync::Mutex, time::sleep};
 
-use crate::{app_state::{ArcEventForwarder, DownloadStatus}, config::{self, LoadedData, Metadata, UrledData}};
+use crate::config::{self, LoadedData, Metadata, UrledData};
 
 struct Manager {
     pub audio_dir: String,

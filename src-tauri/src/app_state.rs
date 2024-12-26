@@ -1,8 +1,8 @@
-use std::{cell::RefCell, path::Path, sync::Arc};
+use std::{path::Path, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Runtime, WebviewWindow};
-use tokio::{spawn, sync::Mutex};
+use tokio::spawn;
 
 use crate::{config::{Audio, Data, Metadata, Playlist, UrledData}, storage::{Storage, StorageError}, ytdlp::{self, YtDlp}};
 
@@ -132,10 +132,6 @@ impl AppState {
                 },
             }
         }
-    }
-
-    pub async fn get_audio_metadata(&self, id: u32) -> Option<Metadata> {
-        self.playlist.get_audio(id).cloned()
     }
 }
 
