@@ -8,6 +8,19 @@ function App() {
   let [url, setUrl] = useState("");
   let [audioData, setAudioData] = useState<Audio | null>(null);
   
+  let thumbnail;
+  let audio;
+  if (audioData) {
+    if (audioData.data.Urled) {
+      thumbnail = audioData.data.Urled.thumbnail;
+      audio = audioData.data.Urled.audio;
+    } else if (audioData.data.Loaded) {
+      thumbnail = URL.createObjectURL(new Blob([new Uint8Array(audioData.data.Loaded.thumbnail.bytes)], { type: audioData.data.Loaded.thumbnail.mime }));
+      audio = URL.createObjectURL(new Blob([new Uint8Array(audioData.data.Loaded.audio.bytes)], { type: audioData.data.Loaded.audio.mime }));
+    }
+  }
+
+
   useEffect(() => {
     (async () => {
       setPlaylist(await getPlaylistMetadata());
@@ -37,8 +50,8 @@ function App() {
         </div>
         <div className="flex-grow">
           { audioData && <div className="flex flex-col items-center">
-            <img src={audioData.data.Urled?.thumbnail} alt="thumbnail" className="w-1/2" />
-            <audio src={audioData.data.Urled?.audio} controls></audio>
+            <img src={thumbnail} alt="thumbnail" className="w-1/2" />
+            <audio src={audio} controls></audio>
           </div> }
         </div>
       </div>

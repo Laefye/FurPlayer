@@ -64,21 +64,6 @@ pub struct YouTubeLoadedMusic {
 }
 
 impl YouTubeMetadata {
-    async fn get_file(&self, url: &String) -> Result<File, Error> {
-        let mut response = reqwest::get(url).await.map_err(|_| Error::Unknown)?;
-        let mime = match response.headers().get("content-type") {
-            Some(content_type) => content_type.to_str().unwrap().to_string(),
-            None => "idont/know".to_string(),
-        };
-        let length = response.content_length().unwrap();
-        let mut bytes = Vec::<u8>::new();
-        while let Some(chunk) = response.chunk().await.map_err(|_| Error::Unknown)? {
-            bytes.extend(chunk);
-            println!("Donwloading {}/{}", bytes.len(), length);
-        }
-        Ok(File { bytes, mime })
-    }
-
     pub fn get_urled_data(&self) -> Result<UrledData, Error> {
         let format = self.formats.iter()
             .filter(|x| x.resolution == "audio only")
@@ -91,17 +76,6 @@ impl YouTubeMetadata {
         Ok(UrledData {
             audio: format.unwrap().url.clone(),
             thumbnail: self.thumbnail.clone(),
-        })
-    }
-
-    pub async fn load(&self) -> Result<LoadedData, Error> {
-        let urled_data = self.get_urled_data()?;
-        let thumbnail = self.get_file(&urled_data.thumbnail).await?;
-        let audio = self.get_file(&urled_data.audio).await?;
-
-        Ok(LoadedData {
-            thumbnail,
-            audio,
         })
     }
 

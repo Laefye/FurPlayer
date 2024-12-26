@@ -6,13 +6,22 @@ export type Metadata = {
     author: string,
 }
 
+export type File = {
+    bytes: number[],
+    mime: string,
+}
+
 export type Audio = {
     metadata: Metadata,
     data: {
         Urled?: {
             thumbnail: string,
             audio: string,
-        }
+        },
+        Loaded?: {
+            audio: File,
+            thumbnail: File,
+        },
     }
 }
 

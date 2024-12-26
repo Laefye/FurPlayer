@@ -25,7 +25,7 @@ pub struct LoadedData {
     pub audio: File,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UrledData {
     pub thumbnail: String,
     pub audio: String,
