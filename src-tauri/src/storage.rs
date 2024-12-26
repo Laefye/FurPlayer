@@ -1,8 +1,9 @@
 use std::{path::Path, sync::Arc, time::Duration};
 
+use serde::{Deserialize, Serialize};
 use tokio::{fs::File, io::AsyncWriteExt, sync::Mutex, time::sleep};
 
-use crate::config::{self, LoadedData, Metadata, UrledData};
+use crate::{app_state::{ArcEventForwarder, DownloadStatus}, config::{self, LoadedData, Metadata, UrledData}};
 
 struct Manager {
     pub audio_dir: String,
@@ -12,6 +13,11 @@ struct Manager {
 #[derive(Clone)]
 pub struct Storage {
     manager: Arc<Mutex<Manager>>,
+}
+
+#[derive(Debug)]
+pub enum StorageError {
+    Internet(reqwest::Error)
 }
 
 impl Manager {
@@ -72,11 +78,11 @@ impl Storage {
         builder
     }
 
-    async fn download_file(&self, url: String, file_path: String) -> Result<(), reqwest::Error> {
+    async fn download_file(&self, url: String, file_path: String) -> Result<(), StorageError> {
         let mut file = File::create(file_path).await.unwrap();
         let mut count = 0; 
         'attempts: for i in 0..5 {
-            let mut response = self.make_request(url.clone(), if count > 0 { Some(count) } else { None }).send().await?;
+            let mut response = self.make_request(url.clone(), if count > 0 { Some(count) } else { None }).send().await.map_err(StorageError::Internet)?;
             let size = response.content_length().unwrap();
             loop {
                 match response.chunk().await {
@@ -94,7 +100,7 @@ impl Storage {
                             println!("Trying again... {}", i);
                             sleep(Duration::from_secs(1)).await;
                             if i == 4 {
-                                return Err(err);
+                                return Err(StorageError::Internet(err));
                             }
                             continue 'attempts;
                         }
@@ -117,7 +123,7 @@ impl Storage {
         manager.queue.contains(&id)
     }
 
-    pub async fn download(&self, urled: UrledData, metadata: Metadata) {
+    pub async fn download(&self, urled: UrledData, metadata: Metadata) -> Result<(), StorageError> {
         let temp = std::env::temp_dir();
         let temp_thumbnail_path = temp.join(metadata.id.to_string() + "_thumbnail.jpeg").to_str().unwrap().to_string();
         let temp_audio_path = temp.join(metadata.id.to_string() + "_audio.webm").to_str().unwrap().to_string();
@@ -137,6 +143,13 @@ impl Storage {
         {
             let mut manager = self.manager.lock().await;
             manager.queue.retain(|&x| x != metadata.id);
+        }
+        if thumbnail.is_err() {
+            Err(thumbnail.unwrap_err())
+        } else if audio.is_err() {
+            Err(audio.unwrap_err())
+        } else {
+            Ok(())
         }
     }
 }

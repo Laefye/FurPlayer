@@ -1,20 +1,26 @@
-use std::path::Path;
+use std::{cell::RefCell, path::Path, sync::Arc};
 
-use tokio::spawn;
+use serde::{Deserialize, Serialize};
+use tauri::{Emitter, Runtime, WebviewWindow};
+use tokio::{spawn, sync::Mutex};
 
-use crate::{config::{Audio, Data, Metadata, Playlist, UrledData}, storage::Storage, ytdlp::{self, YtDlp}};
+use crate::{config::{Audio, Data, Metadata, Playlist, UrledData}, storage::{Storage, StorageError}, ytdlp::{self, YtDlp}};
+
+pub type ArcEventForwarder = Arc<dyn EventForwardTrait + Send + Sync>;
 
 pub struct AppState {
     pub ytdlp: YtDlp,
     pub playlist: Playlist,
     pub storage: Storage,
     playlist_path: String,
+    event_forwarder: ArcEventForwarder,
 }
 
 #[derive(Debug)]
 pub enum Error {
     YouTube(ytdlp::Error),
     NotFound,
+    StorageError(StorageError),
 }
 
 impl ToString for Error {
@@ -28,12 +34,21 @@ impl ToString for Error {
                 ytdlp::Error::NotAudio => "Not audio".to_string(),
             },
             Error::NotFound => "Audio not found in playlist".to_string(),
+            Error::StorageError(error) => match error {
+                StorageError::Internet(error) => {
+                    if error.is_connect() || error.is_timeout() {
+                        "Problems with connection".to_string()
+                    } else {
+                        "Unknown donwload error".to_string()
+                    }
+                },
+            }
         }
     }
 }
 
 impl AppState {
-    pub fn new() -> Self {
+    pub fn new(event_forwarder: ArcEventForwarder) -> Self {
         let is_portable = std::env::var("PORTABLE").is_ok();
         let config_dir = if is_portable {
             std::env::current_exe().unwrap().parent().unwrap().to_str().unwrap().to_string()
@@ -56,6 +71,7 @@ impl AppState {
             playlist,
             storage,
             playlist_path: playlist_path.to_str().unwrap().to_string(),
+            event_forwarder,
         }
     }
 
@@ -64,9 +80,7 @@ impl AppState {
         let ytdlp_urled = ytdlp_metadata.get_urled_data().map_err(Error::YouTube)?;
         let id = rand::random::<u32>();
         let metadata = ytdlp_metadata.create_metadata(id);
-        println!("{:?}", metadata);
         self.download_audio(ytdlp_urled.clone(), metadata.clone());
-        println!("{:?}", metadata);
         self.playlist.add_audio(metadata.clone());
         self.playlist.save(self.playlist_path.clone()).await;
         Ok(Audio {
@@ -82,8 +96,14 @@ impl AppState {
 
     pub fn download_audio(&self, urled: UrledData, metadata: Metadata) {
         let storage = self.storage.clone();
+        let event_forwarder = self.event_forwarder.clone();
         spawn(async move {
-            storage.download(urled, metadata.clone()).await;
+            event_forwarder.on_status_download(metadata.id, DownloadStatus::Started);
+            let result = storage.download(urled, metadata.clone()).await;
+            match result {
+                Ok(_) => event_forwarder.on_status_download(metadata.id, DownloadStatus::Finished),
+                Err(err) => event_forwarder.on_status_download(metadata.id, DownloadStatus::Error(Error::StorageError(err))),
+            }
         });
     }
 
@@ -116,5 +136,47 @@ impl AppState {
 
     pub async fn get_audio_metadata(&self, id: u32) -> Option<Metadata> {
         self.playlist.get_audio(id).cloned()
+    }
+}
+
+pub struct EventForwarder<R: Runtime> {
+    window: WebviewWindow<R>,
+}
+
+pub enum DownloadStatus {
+    Started,
+    Finished,
+    Error(Error),
+}
+
+pub trait EventForwardTrait {
+    fn on_status_download(&self, id: u32, status: DownloadStatus);
+}
+
+impl<R: Runtime> EventForwarder<R> {
+    pub fn new(window: WebviewWindow<R>) -> Self {
+        Self {
+            window,
+        }
+    }
+}
+
+impl<R: Runtime> EventForwardTrait for EventForwarder<R> {
+    fn on_status_download(&self, id: u32, status: DownloadStatus) {
+        #[derive(Debug, Serialize, Deserialize, Clone)]
+        enum Payload {
+            Started(u32),
+            Finished(u32),
+            Error((u32, String)),
+        }
+        let _ = self.window.emit(
+            "status_download",
+            match status {
+                DownloadStatus::Started => Payload::Started(id),
+                DownloadStatus::Finished => Payload::Finished(id),
+                DownloadStatus::Error(error) => Payload::Error((id, error.to_string())),
+            }
+        );
+        
     }
 }

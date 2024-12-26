@@ -1,5 +1,7 @@
 
-use app_state::AppState;
+use std::sync::Arc;
+
+use app_state::{AppState, EventForwarder};
 use config::{Audio, Metadata};
 use tauri::{Manager, State};
 use tokio::sync::Mutex;
@@ -10,7 +12,7 @@ mod storage;
 mod app_state;
 
 #[tauri::command]
-async fn add_playlist(state: State<'_, Mutex<AppState>>, url: String) -> Result<Audio, String> {
+async fn add_new_audio(state: State<'_, Mutex<AppState>>, url: String) -> Result<Audio, String> {
     let mut state = state.lock().await;
     let audio = state.add_new_audio(url).await;
     match audio {
@@ -35,15 +37,23 @@ async fn get_playlist_metadata(state: State<'_, Mutex<AppState>>) -> Result<Vec<
     Ok(state.playlist.audios.clone())
 }
 
+#[tauri::command]
+async fn remove_audio(state: State<'_, Mutex<AppState>>, id: u32) -> Result<(), ()> {
+    let mut state = state.lock().await;
+    state.remove_audio(id).await;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
-            app.manage(Mutex::new(AppState::new()));
+            let window = app.get_webview_window("main").unwrap();
+            app.manage(Mutex::new(AppState::new(Arc::new(EventForwarder::new(window)))));
             Ok(())
         })
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![add_playlist, get_playlist_metadata, load_audio])
+        .invoke_handler(tauri::generate_handler![add_new_audio, get_playlist_metadata, load_audio, remove_audio])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
