@@ -1,3 +1,5 @@
+use std::process;
+
 use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 
@@ -47,6 +49,11 @@ impl YtDlp {
             return Err(Error::BadLink);
         }
         let mut cmd = Command::new(&self.path);
+        // Костыльный костыль
+        #[cfg(target_os = "windows")]
+        {
+            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
         cmd.args(vec![
             "--dump-json".to_string(),
             url.to_string(),
