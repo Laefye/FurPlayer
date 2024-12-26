@@ -99,7 +99,9 @@ impl AppState {
         let event_forwarder = self.event_forwarder.clone();
         spawn(async move {
             event_forwarder.on_status_download(metadata.id, DownloadStatus::Started);
-            let result = storage.download(urled, metadata.clone()).await;
+            let result = storage.download(urled, metadata.clone(), |progress| {
+                event_forwarder.on_status_download(metadata.id, DownloadStatus::Process(progress));
+            }).await;
             match result {
                 Ok(_) => event_forwarder.on_status_download(metadata.id, DownloadStatus::Finished),
                 Err(err) => event_forwarder.on_status_download(metadata.id, DownloadStatus::Error(Error::StorageError(err))),
@@ -142,6 +144,7 @@ pub struct EventForwarder<R: Runtime> {
 pub enum DownloadStatus {
     Started,
     Finished,
+    Process(f64),
     Error(Error),
 }
 
@@ -163,6 +166,7 @@ impl<R: Runtime> EventForwardTrait for EventForwarder<R> {
         enum Payload {
             Started(u32),
             Finished(u32),
+            Process((u32, f64)),
             Error((u32, String)),
         }
         let _ = self.window.emit(
@@ -171,6 +175,7 @@ impl<R: Runtime> EventForwardTrait for EventForwarder<R> {
                 DownloadStatus::Started => Payload::Started(id),
                 DownloadStatus::Finished => Payload::Finished(id),
                 DownloadStatus::Error(error) => Payload::Error((id, error.to_string())),
+                DownloadStatus::Process(progress) => Payload::Process((id, progress)),
             }
         );
         

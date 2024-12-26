@@ -44,7 +44,3 @@ export async function removeAudio(id: number) {
 export async function loadAudio(id: number): Promise<Audio> {
     return await invoke("load_audio", { id });
 }
-
-listen('status_download', (e) => {
-    console.log(e)
-});

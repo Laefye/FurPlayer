@@ -2,6 +2,7 @@ import { createRef, useEffect, useRef, useState } from "react";
 import reactLogo from "./assets/react.svg";
 import { addNewAudio, Audio, getPlaylistMetadata, loadAudio, Metadata, removeAudio } from "./Engine";
 import { Playlist } from "./Playlist";
+import { listen } from "@tauri-apps/api/event";
 
 
 function App() {
@@ -10,8 +11,31 @@ function App() {
   let [audioData, setAudioData] = useState<Audio | null>(null);
   let [loading, setLoading] = useState(false);
   let [thumbnail, setThumbnail] = useState<string | null>(null)
-  let [audio, setAudio] = useState<string | null>(null)
+  let [audio, setAudio] = useState<string | null>(null);
+  let [downloadingTable, setDownloadingTable] = useState<{[id: number]: number}>({});
   let audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    let unlisten = listen('status_download', (e) => {
+        let payload: any = e.payload;
+        let table = {...downloadingTable}
+        if (payload.Started) {
+          table[payload.Started] = 0;
+        }
+        if (payload.Process) {
+          table[payload.Process[0]] = payload.Process[1]
+        }
+        if (payload.Finished) {
+          delete table[payload.Finished];
+        }
+        setDownloadingTable(table);
+        return () => {
+          (async () => {
+            (await unlisten)();
+          })();
+        };
+    });
+  }, []);
 
   useEffect(() => {
     if (audioData) {
@@ -70,8 +94,16 @@ function App() {
         </div>
       ) : (
         audioData && <div className="flex items-center">
-        <div className="w-28 h-28 bg-center bg-cover flex-shrink-0 rounded me-3" style={{backgroundImage: `url(${thumbnail})`}}></div>
-        <audio autoPlay src={audio} controls className="flex-grow" ref={audioRef}></audio>
+          <div className="w-28 h-28 bg-center bg-cover flex-shrink-0 rounded me-3" style={{backgroundImage: `url(${thumbnail})`}}></div>
+          <div className="flex-grow flex flex-col">
+            <audio autoPlay src={audio} controls className="w-full" ref={audioRef}></audio>
+            { downloadingTable[audioData.metadata.id] ? (<>
+              <div className="text-slate-500 mt-2">Downloading:</div>
+              <div className="bg-slate-700 h-2 rounded-lg w-full">
+                <div className="bg-slate-500 h-2 rounded-lg" style={{width: `${downloadingTable[audioData.metadata.id] * 100}%`}}></div>
+              </div>
+            </>) : (<></>)}
+          </div>
         </div>
       )}
       </div>

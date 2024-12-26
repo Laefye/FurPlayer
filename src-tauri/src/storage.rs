@@ -77,7 +77,7 @@ impl Storage {
         builder
     }
 
-    async fn download_file(&self, url: String, file_path: String) -> Result<(), StorageError> {
+    async fn download_file(&self, url: String, file_path: String, progress: impl Fn(f64) -> ()) -> Result<(), StorageError> {
         let mut file = File::create(file_path).await.unwrap();
         let mut count = 0; 
         'attempts: for i in 0..5 {
@@ -93,6 +93,7 @@ impl Storage {
                         count += chunk.len();
                         file.write_all(&chunk).await.unwrap();
                         println!("Downloaded {} bytes / {} bytes", count, size);
+                        progress((count as f64) / (size as f64));
                     },
                     Err(err) => {
                         if err.is_connect() || err.is_timeout() {
@@ -122,7 +123,7 @@ impl Storage {
         manager.queue.contains(&id)
     }
 
-    pub async fn download(&self, urled: UrledData, metadata: Metadata) -> Result<(), StorageError> {
+    pub async fn download(&self, urled: UrledData, metadata: Metadata, progress: impl Fn(f64) -> ()) -> Result<(), StorageError> {
         let temp = std::env::temp_dir();
         let temp_thumbnail_path = temp.join(metadata.id.to_string() + "_thumbnail.jpeg").to_str().unwrap().to_string();
         let temp_audio_path = temp.join(metadata.id.to_string() + "_audio.webm").to_str().unwrap().to_string();
@@ -130,8 +131,8 @@ impl Storage {
             let mut manager = self.manager.lock().await;
             manager.queue.push(metadata.id);
         }
-        let thumbnail = self.download_file(urled.thumbnail, temp_thumbnail_path.clone()).await;
-        let audio = self.download_file(urled.audio, temp_audio_path.clone()).await;
+        let thumbnail = self.download_file(urled.thumbnail, temp_thumbnail_path.clone(), &progress).await;
+        let audio = self.download_file(urled.audio, temp_audio_path.clone(), &progress).await;
         if thumbnail.is_ok() && audio.is_ok() {
             let audio_dir = self.get_audio_dir(metadata.id).await;
             let audio_path = Path::new(&audio_dir);
