@@ -1,11 +1,10 @@
-use std::{path::Path, sync::Arc};
+use std::path::Path;
 
-use tokio::{spawn, sync::Mutex};
+use tokio::spawn;
 
 use crate::{config::{Audio, Data, Metadata, Playlist, UrledData}, storage::Storage, ytdlp::{self, YtDlp}};
 
 pub struct AppState {
-    pub config_dir: String,
     pub ytdlp: YtDlp,
     pub playlist: Playlist,
     pub storage: Storage,
@@ -35,7 +34,12 @@ impl ToString for Error {
 
 impl AppState {
     pub fn new() -> Self {
-        let config_dir = dirs::config_dir().unwrap().join("FurPlayer").to_str().unwrap().to_string();
+        let is_portable = std::env::var("PORTABLE").is_ok();
+        let config_dir = if is_portable {
+            std::env::current_exe().unwrap().parent().unwrap().to_str().unwrap().to_string()
+        } else {
+            dirs::config_dir().unwrap().join("FurPlayer").to_str().unwrap().to_string()
+        };
         let ytdlp_path = std::env::current_exe().unwrap().parent().unwrap().to_path_buf().join("utils").join("yt-dlp.exe").to_str().unwrap().to_string();
         let ytdlp = YtDlp::new(ytdlp_path);
         let playlist_path = Path::new(&config_dir).join("playlist.json");
@@ -48,7 +52,6 @@ impl AppState {
         let audio_dir = Path::new(&config_dir).join("audios").to_str().unwrap().to_string();
         let storage = Storage::new(audio_dir);
         Self {
-            config_dir,
             ytdlp,
             playlist,
             storage,

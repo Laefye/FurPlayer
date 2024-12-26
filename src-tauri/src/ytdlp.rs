@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 
-use crate::config::{File, LoadedData, Metadata, UrledData};
+use crate::config::{File, Metadata, UrledData};
 
 pub struct YtDlp {
     pub path: String,

@@ -1,11 +1,8 @@
-use std::{fs::create_dir_all, path::Path, sync::{Arc, RwLock}};
 
 use app_state::AppState;
-use config::{Audio, LoadedData, Metadata, Platform, Playlist, UrledData};
-use storage::Storage;
+use config::{Audio, Metadata};
 use tauri::{Manager, State};
-use tokio::{spawn, sync::Mutex};
-use ytdlp::{YouTubeLoadedMusic, YtDlp};
+use tokio::sync::Mutex;
 
 mod ytdlp;
 mod config;
