@@ -71,7 +71,6 @@ impl Storage {
         while let Some(chunk) = response.chunk().await? {
             file.write_all(&chunk).await.unwrap();
             count += chunk.len();
-            Self::log(format!("Downloaded {} bytes / {} bytes", count, size));
         }
         Ok(())
     }
@@ -107,8 +106,6 @@ impl Storage {
             tokio::fs::create_dir_all(audio_path).await.unwrap();
             tokio::fs::rename(temp_thumbnail_path, audio_path.join("thumbnail.jpeg")).await.unwrap();
             tokio::fs::rename(temp_audio_path, audio_path.join("audio.webm")).await.unwrap();
-        } else {
-            Self::log("Failed to download".to_string());
         }
         {
             let mut manager = self.manager.lock().await;
