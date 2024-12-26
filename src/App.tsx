@@ -100,7 +100,7 @@ function App() {
             { downloadingTable[audioData.metadata.id] ? (<>
               <div className="text-slate-500 mt-2">Downloading:</div>
               <div className="bg-slate-700 h-2 rounded-lg w-full">
-                <div className="bg-slate-500 h-2 rounded-lg" style={{width: `${downloadingTable[audioData.metadata.id] * 100}%`}}></div>
+                <div className="bg-slate-500 h-2 rounded-lg transition-all" style={{width: `${downloadingTable[audioData.metadata.id] * 100}%`}}></div>
               </div>
             </>) : (<></>)}
           </div>
