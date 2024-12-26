@@ -77,7 +77,7 @@ impl Storage {
         builder
     }
 
-    async fn download_file(&self, url: String, file_path: String, progress: impl Fn(f64) -> ()) -> Result<(), StorageError> {
+    async fn download_file(&self, url: String, file_path: String, mut progress: impl FnMut(f64) -> ()) -> Result<(), StorageError> {
         let mut file = File::create(file_path).await.unwrap();
         let mut count = 0; 
         'attempts: for i in 0..5 {
@@ -131,8 +131,16 @@ impl Storage {
             let mut manager = self.manager.lock().await;
             manager.queue.push(metadata.id);
         }
-        let thumbnail = self.download_file(urled.thumbnail, temp_thumbnail_path.clone(), &progress).await;
-        let audio = self.download_file(urled.audio, temp_audio_path.clone(), &progress).await;
+        let mut thumbnail_progress = 0.0;
+        let mut audio_progress = 0.0;
+        let thumbnail = self.download_file(urled.thumbnail, temp_thumbnail_path.clone(), |x| {
+            thumbnail_progress = x;
+            progress(thumbnail_progress * audio_progress);
+        }).await;
+        let audio = self.download_file(urled.audio, temp_audio_path.clone(), |x| {
+            audio_progress = x;
+            progress(thumbnail_progress * audio_progress);
+        }).await;
         if thumbnail.is_ok() && audio.is_ok() {
             let audio_dir = self.get_audio_dir(metadata.id).await;
             let audio_path = Path::new(&audio_dir);
