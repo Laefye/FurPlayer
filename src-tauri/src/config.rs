@@ -59,7 +59,7 @@ impl Playlist {
 
     pub async fn save(&self, path: String) {
         let file = std::fs::File::create(path).unwrap();
-        serde_json::to_writer(file, self).unwrap();
+        serde_json::to_writer_pretty(file, self).unwrap();
     }
 
     pub fn load(path: String) -> Self {
@@ -70,5 +70,9 @@ impl Playlist {
 
     pub fn get_audio(&self, id: u32) -> Option<&Metadata> {
         self.audios.iter().find(|audio| audio.id == id)
+    }
+
+    pub fn remove_audio(&mut self, id: u32) {
+        self.audios.retain(|audio| audio.id != id);
     }
 }

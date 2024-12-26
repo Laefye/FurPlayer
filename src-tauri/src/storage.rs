@@ -1,6 +1,6 @@
-use std::{path::Path, sync::Arc};
+use std::{path::Path, sync::Arc, time::Duration};
 
-use tokio::{fs::File, io::AsyncWriteExt, sync::Mutex};
+use tokio::{fs::File, io::AsyncWriteExt, sync::Mutex, time::sleep};
 
 use crate::config::{self, LoadedData, Metadata, UrledData};
 
@@ -63,20 +63,47 @@ impl Storage {
         manager.load(id).await
     }
 
-    async fn download_file(url: String, file_path: String) -> Result<(), reqwest::Error> {
-        let mut file = File::create(file_path).await.unwrap();
-        let mut response = reqwest::get(&url).await?;
-        let size = response.content_length().unwrap();
-        let mut count = 0; 
-        while let Some(chunk) = response.chunk().await? {
-            file.write_all(&chunk).await.unwrap();
-            count += chunk.len();
+    fn make_request(&self, url: String, starts: Option<usize>) -> reqwest::RequestBuilder {
+        let client = reqwest::Client::new();
+        let mut builder = client.request(reqwest::Method::GET, url);
+        if let Some(starts) = starts {
+            builder = builder.header("Range", format!("bytes={}-", starts));
         }
-        Ok(())
+        builder
     }
 
-    fn log(message: String) {
-        println!("{}", message);
+    async fn download_file(&self, url: String, file_path: String) -> Result<(), reqwest::Error> {
+        let mut file = File::create(file_path).await.unwrap();
+        let mut count = 0; 
+        'attempts: for i in 0..5 {
+            let mut response = self.make_request(url.clone(), if count > 0 { Some(count) } else { None }).send().await?;
+            let size = response.content_length().unwrap();
+            loop {
+                match response.chunk().await {
+                    Ok(chunk) => {
+                        if chunk.is_none() {
+                            break 'attempts;
+                        }
+                        let chunk = chunk.unwrap();
+                        count += chunk.len();
+                        file.write_all(&chunk).await.unwrap();
+                        println!("Downloaded {} bytes / {} bytes", count, size);
+                    },
+                    Err(err) => {
+                        if err.is_connect() || err.is_timeout() {
+                            println!("Trying again... {}", i);
+                            sleep(Duration::from_secs(1)).await;
+                            if i == 4 {
+                                return Err(err);
+                            }
+                            continue 'attempts;
+                        }
+                    }
+                }
+            }
+        }
+        println!("Downloaded!");
+        Ok(())
     }
 
     async fn get_audio_dir(&self, id: u32) -> String {
@@ -98,8 +125,8 @@ impl Storage {
             let mut manager = self.manager.lock().await;
             manager.queue.push(metadata.id);
         }
-        let thumbnail = Self::download_file(urled.thumbnail, temp_thumbnail_path.clone()).await;
-        let audio = Self::download_file(urled.audio, temp_audio_path.clone()).await;
+        let thumbnail = self.download_file(urled.thumbnail, temp_thumbnail_path.clone()).await;
+        let audio = self.download_file(urled.audio, temp_audio_path.clone()).await;
         if thumbnail.is_ok() && audio.is_ok() {
             let audio_dir = self.get_audio_dir(metadata.id).await;
             let audio_path = Path::new(&audio_dir);

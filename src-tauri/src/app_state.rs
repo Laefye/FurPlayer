@@ -75,6 +75,11 @@ impl AppState {
         })
     }
 
+    pub async fn remove_audio(&mut self, id: u32) {
+        self.playlist.remove_audio(id);
+        self.playlist.save(self.playlist_path.clone()).await;
+    }
+
     pub fn download_audio(&self, urled: UrledData, metadata: Metadata) {
         let storage = self.storage.clone();
         spawn(async move {
