@@ -11,32 +11,10 @@ function App() {
   let [url, setUrl] = useState("");
   let [audioData, setAudioData] = useState<AudioDTO | null>(null);
   let [loading, setLoading] = useState(false);
+  let [selectedId, setSelectedId] = useState<number | null>(null);
   let [thumbnail, setThumbnail] = useState<string | null>(null)
   let [audio, setAudio] = useState<string | null>(null);
-  let [downloadingTable, setDownloadingTable] = useState<{[id: number]: number}>({});
   let audioRef = useRef<HTMLAudioElement | null>(null);
-
-  useEffect(() => {
-    let unlisten = listen('status_download', (e) => {
-        let payload: any = e.payload;
-        let table = {...downloadingTable}
-        if (payload.Started) {
-          table[payload.Started] = 0;
-        }
-        if (payload.Process) {
-          table[payload.Process[0]] = payload.Process[1]
-        }
-        if (payload.Finished) {
-          delete table[payload.Finished];
-        }
-        setDownloadingTable(table);
-        return () => {
-          (async () => {
-            (await unlisten)();
-          })();
-        };
-    });
-  }, []);
 
   useEffect(() => {
     if (audioData) {
@@ -59,6 +37,7 @@ function App() {
 
   async function _addPlaylist(url: string) {
     setLoading(true);
+    setSelectedId(null);
     let audio = await addNewAudio(url);
     setLoading(false);
     setPlaylist([...playlist, {id: audio.id, title: audio.title, author: audio.author, source: audio.source}]);
@@ -67,6 +46,7 @@ function App() {
 
   async function _loadAudio(id: number) {
     setLoading(true);
+    setSelectedId(id);
     let audio = await loadAudio(id);
     setLoading(false);
     setAudioData(audio);
@@ -87,7 +67,7 @@ function App() {
         <input onChange={(e) => setUrl(e.target.value)} type="url" placeholder="YouTube url" className="p-2 px-3 rounded-lg bg-gray-800 text-white outline-none" />
       </form>
       </div>
-      <Playlist playlist={playlist} onSelect={_loadAudio} onRemove={_removeAudio} selectedId={audioData ? audioData.id : null} />
+      <Playlist playlist={playlist} onSelect={_loadAudio} onRemove={_removeAudio} selectedId={selectedId ? {id: selectedId, loading} : null} />
       <div className="p-4 bg-gray-800">
       { loading ? (
         <div className="flex items-center">
@@ -99,12 +79,6 @@ function App() {
           <div className="w-28 h-28 bg-center bg-cover flex-shrink-0 rounded me-3" style={{backgroundImage: `url(${thumbnail})`}}></div>
           <div className="flex-grow flex flex-col">
             <audio autoPlay src={audio} controls className="w-full" ref={audioRef}></audio>
-            { downloadingTable[audioData.id] ? (<>
-              <div className="text-slate-500 mt-2">Downloading:</div>
-              <div className="bg-slate-700 h-2 rounded-lg w-full">
-                <div className="bg-slate-500 h-2 rounded-lg transition-all" style={{width: `${downloadingTable[audioData.id] * 100}%`}}></div>
-              </div>
-            </>) : (<></>)}
           </div>
         </div>
       )}

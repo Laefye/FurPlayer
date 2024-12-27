@@ -4,7 +4,9 @@ export type AudioDTO = {
     id: number,
     title: string,
     author: string,
-    source: string,
+    source: {
+        YouTube?: string,
+    },
     content: {
         Url?: {
             thumbnail: string,
@@ -27,7 +29,9 @@ export type IndexedAudioDTO = {
     id: number,
     title: string,
     author: string,
-    source: string,
+    source: {
+        YouTube?: string,
+    },
 }
 
 
