@@ -6,7 +6,7 @@ pub enum Source {
 impl ToString for Source {
     fn to_string(&self) -> String {
         match self {
-            Source::YouTube(url) => "YouTube".to_string(),
+            Source::YouTube(_) => "YouTube".to_string(),
         }
     }
 }

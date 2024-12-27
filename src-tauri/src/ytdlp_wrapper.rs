@@ -68,7 +68,7 @@ impl YtDlp {
 #[derive(Debug, Clone)]
 pub struct YouTubeContentSource {
     pub thumbnail: String,
-    pub audio: String,
+    pub media: String,
 }
 
 impl YouTubeMetadata {
@@ -81,7 +81,7 @@ impl YouTubeMetadata {
             return Err(Error::NotAudio);
         }
         Ok(YouTubeContentSource {
-            audio: format.unwrap().url.clone(),
+            media: format.unwrap().url.clone(),
             thumbnail: self.thumbnail.clone(),
         })
     }

@@ -123,7 +123,7 @@ impl AppState {
         self.playlist.add_audio(audio.clone()).await;
         self.save_playlist().await;
         self.download_audio(audio.clone(), content.clone());
-        Ok((audio, content.thumbnail, content.audio).into())
+        Ok((audio, content.thumbnail, content.media).into())
     }
 
     pub async fn save_playlist(&self) {
@@ -139,7 +139,7 @@ impl AppState {
     pub fn download_audio(&self, audio: audio::Audio, content: YouTubeContentSource) {
         let downloader = self.downloader.clone();
         tokio::spawn(async move {
-            let _ = downloader.save(&audio, |_, _| {async {}}, RequestFiles::new(content.thumbnail, content.audio)).await;
+            let _ = downloader.save(&audio, |_, _| {async {}}, RequestFiles::new(content.thumbnail, content.media)).await;
         });
     }
 
@@ -153,7 +153,7 @@ impl AppState {
                         AudioDTO { id: audio.id,
                             content: ContentDTO::Local {
                                 thumbnail: FileDTO { bytes: files.thumbnail, mime: files.thumbnail_mime },
-                                media: FileDTO { bytes: files.audio, mime: files.audio_mime },
+                                media: FileDTO { bytes: files.media, mime: files.media_mime },
                             },
                             title: audio.metadata.title,
                             author: audio.metadata.author,
@@ -171,7 +171,7 @@ impl AppState {
                             if !self.downloader.is_in_queue(audio.id).await {
                                 self.download_audio(cloned.clone(), content.clone());
                             }
-                            Some((cloned, content.thumbnail, content.audio).into())
+                            Some((cloned, content.thumbnail, content.media).into())
                         },
                     }
                 }

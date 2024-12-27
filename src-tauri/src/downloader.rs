@@ -55,20 +55,20 @@ impl ContentRetriever for DefaultContentRetriever {
 #[derive(Debug)]
 pub struct RequestFiles {
     pub thumbnail: String,
-    pub audio: String,
+    pub media: String,
 }
 
 #[derive(Debug)]
 pub struct ResponseFiles {
     pub thumbnail: Vec<u8>,
     pub thumbnail_mime: String,
-    pub audio: Vec<u8>,
-    pub audio_mime: String,
+    pub media: Vec<u8>,
+    pub media_mime: String,
 }
 
 impl RequestFiles {
-    pub fn new(thumbnail: String, audio: String) -> Self {
-        Self { thumbnail, audio }
+    pub fn new(thumbnail: String, media: String) -> Self {
+        Self { thumbnail, media }
     }
 }
 
@@ -162,9 +162,9 @@ impl Storage for FileDownloader {
         tokio::fs::create_dir_all(&audio_dir).await.map_err(|_| Error::Unknown)?;
         tokio::fs::create_dir_all(&downloading_dir).await.map_err(|_| Error::Unknown)?;
         let thumbnail_content = self.donwload_file(audio, &callback, downloads.thumbnail, "thumbnail.bin".to_string()).await?;
-        let audio_content = self.donwload_file(audio, &callback, downloads.audio, "audio.bin".to_string()).await?;
+        let audio_content = self.donwload_file(audio, &callback, downloads.media, "media.bin".to_string()).await?;
         tokio::fs::rename(downloading_dir.join("thumbnail.bin"), audio_dir.join(format!("thumbnail.{}", mime2ext(thumbnail_content.mime.clone()).unwrap_or("bin")))).await.map_err(|_| Error::Unknown)?;
-        tokio::fs::rename(downloading_dir.join("audio.bin"), audio_dir.join(format!("audio.{}", mime2ext(audio_content.mime.clone()).unwrap_or("bin")))).await.map_err(|_| Error::Unknown)?;
+        tokio::fs::rename(downloading_dir.join("media.bin"), audio_dir.join(format!("media.{}", mime2ext(audio_content.mime.clone()).unwrap_or("bin")))).await.map_err(|_| Error::Unknown)?;
         let index = Index {
             media_mime: audio_content.mime,
             thumbnail_mime: thumbnail_content.mime,
@@ -189,12 +189,12 @@ impl Storage for FileDownloader {
         let index = tokio::fs::read(audio_dir.join("index.json")).await.map_err(|_| Error::NotFound)?;
         let index = serde_json::from_slice::<Index>(&index).map_err(|_| Error::Unknown)?;
         let thumbnail = tokio::fs::read(audio_dir.join(format!("thumbnail.{}", mime2ext(index.thumbnail_mime.clone()).unwrap_or("bin")))).await.map_err(|_| Error::NotFound)?;
-        let audio = tokio::fs::read(audio_dir.join(format!("audio.{}", mime2ext(index.media_mime.clone()).unwrap_or("bin")))).await.map_err(|_| Error::NotFound)?;
+        let audio = tokio::fs::read(audio_dir.join(format!("media.{}", mime2ext(index.media_mime.clone()).unwrap_or("bin")))).await.map_err(|_| Error::NotFound)?;
         Ok(ResponseFiles {
             thumbnail,
             thumbnail_mime: index.thumbnail_mime,
-            audio,
-            audio_mime: index.media_mime,
+            media: audio,
+            media_mime: index.media_mime,
         })
     }
     
