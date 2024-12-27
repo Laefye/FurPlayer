@@ -5,15 +5,15 @@ pub enum Source {
 
 #[derive(Debug, Clone)]
 pub struct Metadata {
-    title: String,
-    author: String,
-    source: Source,
+    pub title: String,
+    pub author: String,
+    pub source: Source,
 }
 
 #[derive(Debug, Clone)]
 pub struct Audio {
-    id: u32,
-    metadata: Metadata,
+    pub id: u32,
+    pub metadata: Metadata,
 }
 
 impl Audio {

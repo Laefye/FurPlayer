@@ -1,5 +1,7 @@
 use std::{collections::HashMap, future::Future, io::Write};
 
+use crate::audio::Audio;
+
 #[derive(Debug)]
 pub struct Content {
     pub mime: String,
@@ -42,5 +44,45 @@ impl ContentRetriever for DefaultContentRetriever {
 }
 
 pub trait Storage {
-    async fn save(&self, map: HashMap<String, String>) -> Result<(), Error>;
+    async fn save<C, Fut>(&mut self, audio: &Audio, callback: C, downloads: HashMap<String, String>) -> Result<(), Error>
+    where
+        C: Fn(u64, u64) -> Fut,
+        Fut: Future<Output = bool>;
+
+    fn has_file(&self, audio: &Audio, file: String) -> bool;
+}
+
+pub struct MemoryStorage<D: ContentRetriever> {
+    map: HashMap<u32, HashMap<String, Vec<u8>>>,
+    content_retriever: D,
+}
+
+impl<D: ContentRetriever> MemoryStorage<D> {
+    pub fn new(content_retriever: D) -> Self {
+        Self {
+            map: HashMap::new(),
+            content_retriever,
+        }
+    }
+}
+
+impl<D: ContentRetriever> Storage for MemoryStorage<D> {
+    async fn save<C, Fut>(&mut self, audio: &Audio, callback: C, downloads: HashMap<String, String>) -> Result<(), Error>
+    where
+        C: Fn(u64, u64) -> Fut,
+        Fut: Future<Output = bool>
+    {
+        let mut downloaded = HashMap::new();
+        for (filename, url) in downloads {
+            let mut bytes = Vec::new();
+            self.content_retriever.download(url, &mut bytes, &callback).await?;
+            downloaded.insert(filename, bytes);
+        }
+        self.map.insert(audio.id, downloaded);
+        Ok(())
+    }
+    
+    fn has_file(&self, audio: &Audio, file: String) -> bool {
+        self.map.get(&audio.id).map(|x| x.contains_key(&file)).unwrap_or(false)
+    }
 }
