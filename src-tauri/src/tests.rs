@@ -1,6 +1,6 @@
 use std::{collections::HashMap, env, sync::{atomic::AtomicBool, Arc}};
 
-use crate::{audio::{Audio, Source}, downloader::{ContentRetriever, DefaultContentRetriever, MemoryStorage, Storage}, ytdlp_wrapper::{self, YtDlp}};
+use crate::{audio::{Audio, Source}, downloader::{ContentRetriever, DefaultContentRetriever, Storage}, ytdlp_wrapper::{self, YtDlp}};
 
 
 #[tokio::test]
@@ -45,27 +45,6 @@ async fn downloader_test() {
     let source = source.unwrap();
     assert!(source.mime.contains("text/plain"));
     assert_eq!(downloaded.load(std::sync::atomic::Ordering::SeqCst), true);
-}
-
-#[tokio::test]
-async fn storage_test() {
-    let storage = MemoryStorage::new(DefaultContentRetriever);
-    let downloaded = AtomicBool::new(false);
-    let d = |current, size| {
-        let downloaded = &downloaded;
-        async move {
-            if current == size {
-                downloaded.store(true, std::sync::atomic::Ordering::SeqCst);
-            }
-            return true;
-        }
-    };
-    let audio = Audio::create("Test".to_string(), "Artist".to_string(), Source::YouTube("https://www.youtube.com/watch?v=dQw4w9WgXcQ".to_string()));
-    let mut map = HashMap::new();
-    map.insert("license".to_string(), "https://raw.githubusercontent.com/Laefye/FurPlayer/refs/heads/main/LICENSE".to_string());
-    storage.save(&audio, d, map).await.unwrap();
-    assert!(downloaded.load(std::sync::atomic::Ordering::SeqCst));
-    assert!(storage.has_file(&audio, "license".to_string()).await);
 }
 
 #[tokio::test]

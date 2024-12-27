@@ -1,14 +1,15 @@
 import { createRef, useEffect, useRef, useState } from "react";
 import reactLogo from "./assets/react.svg";
-import { addNewAudio, Audio, getPlaylistMetadata, loadAudio, Metadata, removeAudio } from "./Engine";
+// import { addNewAudio, Audio, getPlaylistMetadata, loadAudio, AudioDTO, removeAudio } from "./Engine";
 import { Playlist } from "./Playlist";
 import { listen } from "@tauri-apps/api/event";
+import { addNewAudio, AudioDTO, getPlaylistMetadata, IndexedAudioDTO, loadAudio } from "./Engine";
 
 
 function App() {
-  let [playlist, setPlaylist] = useState<Metadata[]>([]);
+  let [playlist, setPlaylist] = useState<IndexedAudioDTO[]>([]);
   let [url, setUrl] = useState("");
-  let [audioData, setAudioData] = useState<Audio | null>(null);
+  let [audioData, setAudioData] = useState<AudioDTO | null>(null);
   let [loading, setLoading] = useState(false);
   let [thumbnail, setThumbnail] = useState<string | null>(null)
   let [audio, setAudio] = useState<string | null>(null);
@@ -39,13 +40,14 @@ function App() {
 
   useEffect(() => {
     if (audioData) {
-      if (audioData.data.Urled) {
-        setThumbnail(audioData.data.Urled.thumbnail);
-        setAudio(audioData.data.Urled.audio);
-      } else if (audioData.data.Loaded) {
-        setThumbnail(URL.createObjectURL(new Blob([new Uint8Array(audioData.data.Loaded.thumbnail.bytes)], { type: audioData.data.Loaded.thumbnail.mime })));
-        setAudio(URL.createObjectURL(new Blob([new Uint8Array(audioData.data.Loaded.audio.bytes)], { type: audioData.data.Loaded.audio.mime })));
+      if (audioData.content.Url) {
+        setThumbnail(audioData.content.Url.thumbnail);
+        setAudio(audioData.content.Url.media);
+      } else if (audioData.content.Local) {
+        setThumbnail(URL.createObjectURL(new Blob([new Uint8Array(audioData.content.Local.thumbnail.bytes)], { type: audioData.content.Local.thumbnail.mime })));
+        setAudio(URL.createObjectURL(new Blob([new Uint8Array(audioData.content.Local.media.bytes)], { type: audioData.content.Local.media.mime })));
       }
+
     }
   }, [audioData]);
 
@@ -59,7 +61,7 @@ function App() {
     setLoading(true);
     let audio = await addNewAudio(url);
     setLoading(false);
-    setPlaylist([...playlist, audio.metadata]);
+    setPlaylist([...playlist, {id: audio.id, title: audio.title, author: audio.author, source: audio.source}]);
     setAudioData(audio);
   }
 
@@ -71,11 +73,11 @@ function App() {
   }
 
   async function _removeAudio(id: number) {
-    await removeAudio(id);
-    if (audioData.metadata.id == id) {
-      setAudioData(null);
-    }
-    setPlaylist(playlist.filter(metadata => metadata.id !== id));
+    // await removeAudio(id);
+    // if (audioData.metadata.id == id) {
+    //   setAudioData(null);
+    // }
+    // setPlaylist(playlist.filter(metadata => metadata.id !== id));
   }
 
   return (
@@ -85,7 +87,7 @@ function App() {
         <input onChange={(e) => setUrl(e.target.value)} type="url" placeholder="YouTube url" className="p-2 px-3 rounded-lg bg-gray-800 text-white outline-none" />
       </form>
       </div>
-      <Playlist playlist={playlist} onSelect={_loadAudio} onRemove={_removeAudio} selectedId={audioData ? audioData.metadata.id : null} />
+      <Playlist playlist={playlist} onSelect={_loadAudio} onRemove={_removeAudio} selectedId={audioData ? audioData.id : null} />
       <div className="p-4 bg-gray-800">
       { loading ? (
         <div className="flex items-center">
@@ -97,10 +99,10 @@ function App() {
           <div className="w-28 h-28 bg-center bg-cover flex-shrink-0 rounded me-3" style={{backgroundImage: `url(${thumbnail})`}}></div>
           <div className="flex-grow flex flex-col">
             <audio autoPlay src={audio} controls className="w-full" ref={audioRef}></audio>
-            { downloadingTable[audioData.metadata.id] ? (<>
+            { downloadingTable[audioData.id] ? (<>
               <div className="text-slate-500 mt-2">Downloading:</div>
               <div className="bg-slate-700 h-2 rounded-lg w-full">
-                <div className="bg-slate-500 h-2 rounded-lg transition-all" style={{width: `${downloadingTable[audioData.metadata.id] * 100}%`}}></div>
+                <div className="bg-slate-500 h-2 rounded-lg transition-all" style={{width: `${downloadingTable[audioData.id] * 100}%`}}></div>
               </div>
             </>) : (<></>)}
           </div>

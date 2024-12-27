@@ -1,8 +1,9 @@
 
 use std::sync::Arc;
 
-use app_state::{AppState, EventForwarder};
+use app_state::{AppState, AudioDTO, EventForwarder, IndexedAudioDTO};
 use config::{Audio, Metadata};
+use serde::{Deserialize, Serialize};
 use tauri::{Manager, State};
 use tokio::sync::Mutex;
 
@@ -14,8 +15,9 @@ mod audio;
 mod ytdlp_wrapper;
 mod downloader;
 
+
 #[tauri::command]
-async fn add_new_audio(state: State<'_, Mutex<AppState>>, url: String) -> Result<Audio, String> {
+async fn add_new_audio(state: State<'_, Mutex<AppState>>, url: String) -> Result<AudioDTO, String> {
     let mut state = state.lock().await;
     let audio = state.add_new_audio(url).await;
     match audio {
@@ -25,19 +27,16 @@ async fn add_new_audio(state: State<'_, Mutex<AppState>>, url: String) -> Result
 }
 
 #[tauri::command]
-async fn load_audio(state: State<'_, Mutex<AppState>>, id: u32) -> Result<Audio, String> {
+async fn load_audio(state: State<'_, Mutex<AppState>>, id: u32) -> Result<Option<AudioDTO>, String> {
     let state = state.lock().await;
     let audio = state.get_audio(id).await;
-    match audio {
-        Ok(audio) => Ok(audio),
-        Err(err) => Err(err.to_string()),
-    }
+    Ok(audio)
 }
 
 #[tauri::command]
-async fn get_playlist_metadata(state: State<'_, Mutex<AppState>>) -> Result<Vec<Metadata>, String> {
+async fn get_playlist_metadata(state: State<'_, Mutex<AppState>>) -> Result<Vec<IndexedAudioDTO>, String> {
     let state = state.lock().await;
-    Ok(state.playlist.audios.clone())
+    Ok(state.get_all_audios().await)
 }
 
 #[tauri::command]
