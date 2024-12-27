@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Runtime, WebviewWindow};
 use tokio::spawn;
 
-use crate::{config::{Audio, Data, Metadata, Playlist, UrledData}, storage::{Storage, StorageError}, ytdlp::{self, YtDlp}};
+use crate::{config::{Audio, Data, Metadata, Playlist, UrledData}, storage::{Storage, StorageError}, ytdlp::{self, YtDlp}, ytdlp_wrapper};
 
 pub type ArcEventForwarder = Arc<dyn EventForwardTrait + Send + Sync>;
 
@@ -14,6 +14,7 @@ pub struct AppState {
     pub storage: Storage,
     playlist_path: String,
     event_forwarder: ArcEventForwarder,
+    ytdlp_wrapper: ytdlp_wrapper::YtDlp,
 }
 
 #[derive(Debug)]
@@ -56,7 +57,8 @@ impl AppState {
             dirs::config_dir().unwrap().join("FurPlayer").to_str().unwrap().to_string()
         };
         let ytdlp_path = std::env::current_exe().unwrap().parent().unwrap().to_path_buf().join("utils").join("yt-dlp.exe").to_str().unwrap().to_string();
-        let ytdlp = YtDlp::new(ytdlp_path);
+        let ytdlp = YtDlp::new(ytdlp_path.clone());
+        let ytdlp_wrapper = ytdlp_wrapper::YtDlp::new(ytdlp_path);
         let playlist_path = Path::new(&config_dir).join("playlist.json");
         let playlist;
         if playlist_path.exists() {
@@ -72,6 +74,7 @@ impl AppState {
             storage,
             playlist_path: playlist_path.to_str().unwrap().to_string(),
             event_forwarder,
+            ytdlp_wrapper,
         }
     }
 
