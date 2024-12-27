@@ -30,13 +30,6 @@ pub use playlist::Playlist;
 pub use playlist::PlaylistIOImpl;
 
 impl Audio {
-    pub fn new(id: u32, metadata: Metadata) -> Self {
-        Self {
-            id,
-            metadata,
-        }
-    }
-
     pub fn create(title: String, author: String, source: Source) -> Self {
         Self {
             id: rand::random(),

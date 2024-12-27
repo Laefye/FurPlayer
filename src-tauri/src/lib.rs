@@ -1,15 +1,8 @@
 
-use std::sync::Arc;
-
-use app_state::{AppState, AudioDTO, EventForwarder, IndexedAudioDTO};
-use config::{Audio, Metadata};
-use serde::{Deserialize, Serialize};
+use app_state::{AppState, AudioDTO, IndexedAudioDTO};
 use tauri::{Manager, State};
 use tokio::sync::Mutex;
 
-mod ytdlp;
-mod config;
-mod storage;
 mod app_state;
 mod audio;
 mod ytdlp_wrapper;
@@ -50,8 +43,7 @@ async fn remove_audio(state: State<'_, Mutex<AppState>>, id: u32) -> Result<(), 
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
-            let window = app.get_webview_window("main").unwrap();
-            app.manage(Mutex::new(AppState::new(Arc::new(EventForwarder::new(window)))));
+            app.manage(Mutex::new(AppState::new()));
             Ok(())
         })
         .plugin(tauri_plugin_opener::init())

@@ -1,7 +1,5 @@
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use tokio::process::Command;
-
-use crate::config::{File, Metadata, UrledData};
 
 pub struct YtDlp {
     pub path: String,
@@ -11,7 +9,6 @@ pub struct YtDlp {
 pub struct YouTubeMetadata {
     pub id: String,
     pub title: String,
-    pub description: String,
     pub thumbnail: String,
     pub formats: Vec<YouTubeFormat>,
     pub channel: String,
@@ -19,13 +16,9 @@ pub struct YouTubeMetadata {
 
 #[derive(Debug, Deserialize)]
 pub struct YouTubeFormat {
-    pub format: String,
     pub url: String,
     pub ext: String,
     pub resolution: String,
-    pub format_id: String,
-    pub protocol: String,
-    pub abr: Option<f64>,
 }
 
 #[derive(Debug)]

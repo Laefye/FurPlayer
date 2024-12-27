@@ -1,6 +1,6 @@
-use std::{collections::HashMap, env, sync::{atomic::AtomicBool, Arc}};
+use std::{env, sync::atomic::AtomicBool};
 
-use crate::{audio::{Audio, Source}, downloader::{ContentRetriever, DefaultContentRetriever, Storage}, ytdlp_wrapper::{self, YtDlp}};
+use crate::{downloader::{ContentRetriever, DefaultContentRetriever}, ytdlp_wrapper::{self, YtDlp}};
 
 
 #[tokio::test]
