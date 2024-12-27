@@ -140,9 +140,10 @@ impl AppState {
             },
         }
         let audio_dir = Path::new(&config_dir).join("audios").to_str().unwrap().to_string();
+        let downloading_dir = Path::new(&config_dir).join("downloading").to_str().unwrap().to_string();
         Self {
             ytdlp,
-            storage: Arc::new(FileDownloader::new(audio_dir)),
+            storage: Arc::new(FileDownloader::new(audio_dir, downloading_dir)),
             playlist_path: playlist_path.to_str().unwrap().to_string(),
             event_forwarder,
             ytdlp_wrapper,
@@ -198,6 +199,9 @@ impl AppState {
                         audio::Source::YouTube(url) => {
                             let metadata = self.ytdlp_wrapper.fetch(url.clone()).await.ok()?;
                             let content = metadata.get_content().ok()?;
+                            if !self.storage.is_in_queue(audio.id).await {
+                                self.download_audio(cloned.clone(), content.clone());
+                            }
                             Some((cloned, content.thumbnail, content.audio).into())
                         },
                     }

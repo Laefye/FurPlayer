@@ -1,6 +1,7 @@
 use std::{collections::HashMap, future::Future, io::Write, path::Path, sync::Arc};
 
-use tokio::{io::AsyncWriteExt, sync::Mutex};
+use reqwest::Method;
+use tokio::{fs, io::AsyncWriteExt, sync::Mutex};
 
 use crate::audio::Audio;
 
@@ -33,7 +34,7 @@ impl ContentRetriever for DefaultContentRetriever {
         F: Fn(u64, u64) -> Fut,
         Fut: Future<Output = bool>,
     {
-        let mut response = reqwest::get(url).await.map_err(|_| Error::Unknown)?;
+        let mut response = reqwest::get(&url).await.map_err(|_| Error::Unknown)?;
         let size = response.content_length().unwrap_or(0);
         let mime = response.headers().get("Content-Type").map(|x| x.to_str().unwrap_or("")).unwrap_or("").to_string();
         let mut length = 0;
@@ -132,14 +133,18 @@ pub trait Storage {
 
 pub struct FileDownloader {
     audio_dir: String,
+    downloading_dir: String,
     content_retriever: DefaultContentRetriever,
+    queue: Mutex<Vec<u32>>,
 }
 
 impl FileDownloader {
-    pub fn new(audio_dir: String) -> Self {
+    pub fn new(audio_dir: String, downloading_dir: String) -> Self {
         Self {
             audio_dir,
+            downloading_dir,
             content_retriever: DefaultContentRetriever,
+            queue: Mutex::new(Vec::new()),
         }
     }
 
@@ -148,15 +153,14 @@ impl FileDownloader {
         C: Fn(u64, u64) -> Fut,
         Fut: Future<Output = ()>,
     {
-        let audio_dir = Path::new(&self.audio_dir).join(audio.id.to_string());
-        let mut file = tokio::fs::File::create(audio_dir.join(filename)).await.map_err(|_| Error::Unknown)?;
+        let downloading_dir = Path::new(&self.downloading_dir).join(audio.id.to_string());
+        let mut file = tokio::fs::File::create(downloading_dir.join(filename)).await.map_err(|_| Error::Unknown)?;
         let mut bytes = Vec::new();
         self.content_retriever.download(url, &mut bytes, |downloaded, total| {
             let callback = &callback;
             async move {
                 callback(downloaded, total).await;
-                // self.is_in_queue(audio.id).await
-                true
+                self.is_in_queue(audio.id).await
             }
         }).await?;
         file.write_all(&bytes).await.map_err(|_| Error::Unknown)?;
@@ -169,12 +173,23 @@ impl Storage for FileDownloader {
     where
         C: Fn(u64, u64) -> Fut,
         Fut: Future<Output = ()>
-    {
-        // TODO: А очередь будет?
+    {        
+        {
+            let mut queue = self.queue.lock().await;
+            if queue.contains(&audio.id) {
+                return Err(Error::InQueue);
+            }
+            queue.push(audio.id);
+        }
         let audio_dir = Path::new(&self.audio_dir).join(audio.id.to_string());
+        let downloading_dir = Path::new(&self.downloading_dir).join(audio.id.to_string());
         tokio::fs::create_dir_all(&audio_dir).await.map_err(|_| Error::Unknown)?;
+        tokio::fs::create_dir_all(&downloading_dir).await.map_err(|_| Error::Unknown)?;
         self.donwload_file(audio, &callback, downloads.thumbnail, "thumbnail.jpeg".to_string()).await?;
         self.donwload_file(audio, &callback, downloads.audio, "audio.webm".to_string()).await?;
+        tokio::fs::rename(downloading_dir.join("thumbnail.jpeg"), audio_dir.join("thumbnail.jpeg")).await.map_err(|_| Error::Unknown)?;
+        tokio::fs::rename(downloading_dir.join("audio.webm"), audio_dir.join("audio.webm")).await.map_err(|_| Error::Unknown)?;
+        self.queue.lock().await.retain(|x| *x != audio.id);
         Ok(())
     }
     
@@ -184,7 +199,7 @@ impl Storage for FileDownloader {
     }
     
     async fn is_in_queue(&self, id: u32) -> bool {
-        false
+        self.queue.lock().await.contains(&id)
     }
     
     async fn get_files(&self, audio: &Audio) -> Result<ResponseFiles, Error> {
