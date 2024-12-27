@@ -20,6 +20,7 @@ pub trait ContentRetriever {
         Fut: Future<Output = bool>;
 }
 
+#[derive(Debug)]
 pub struct DefaultContentRetriever;
 
 impl ContentRetriever for DefaultContentRetriever {
@@ -52,6 +53,7 @@ pub trait Storage {
     fn has_file(&self, audio: &Audio, file: String) -> bool;
 }
 
+#[derive(Debug)]
 pub struct MemoryStorage<D: ContentRetriever> {
     map: HashMap<u32, HashMap<String, Vec<u8>>>,
     content_retriever: D,

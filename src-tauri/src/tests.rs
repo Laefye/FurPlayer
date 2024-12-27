@@ -71,7 +71,7 @@ async fn storage_test() {
 #[tokio::test]
 async fn downloader_cancel_test() {
     let downloader = DefaultContentRetriever;
-    let d = |current, size| {
+    let d = |_, _| {
         async move {
             return false;
         }
@@ -80,4 +80,27 @@ async fn downloader_cancel_test() {
     let source = downloader.download("https://raw.githubusercontent.com/Laefye/FurPlayer/refs/heads/main/LICENSE".to_string(), &mut bytes, d).await;
     assert!(source.is_err());
     assert!(matches!(source.unwrap_err(), crate::downloader::Error::Canceled));
+}
+
+#[tokio::test]
+async fn audio_download_test() {
+    let ytdlp = YtDlp::new(env::current_exe().unwrap().parent().unwrap().parent().unwrap().join("utils").join("yt-dlp.exe").to_str().unwrap().to_string());
+    let mut storage = MemoryStorage::new(DefaultContentRetriever);
+    let d = |downloaded, total| {
+        async move {
+            println!("Downloaded {}/{}!", downloaded, total);
+            return true;
+        }
+    };
+    let youtube_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ".to_string();
+    let metadata = ytdlp.fetch(youtube_url.clone()).await.unwrap();
+    let content = metadata.get_content().unwrap();
+    let map = vec![
+        ("thumbnail.jpeg".to_string(), content.thumbnail),
+        // ("audio.webm".to_string(), content.audio),
+    ].into_iter().collect();
+    let audio = Audio::create("Test".to_string(), "Artist".to_string(), Source::YouTube(youtube_url.clone()));
+    storage.save(&audio, d, map).await.unwrap();
+
+    println!("{:#?}", storage);
 }
