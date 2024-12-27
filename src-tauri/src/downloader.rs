@@ -1,6 +1,6 @@
 use std::{future::Future, io::Write, path::Path};
 
-use tokio::{io::AsyncWriteExt, sync::Mutex};
+use tokio::{io::AsyncWriteExt, sync::{broadcast, Mutex}};
 
 use crate::audio::Audio;
 
@@ -12,6 +12,7 @@ pub struct Content {
 #[derive(Debug)]
 pub enum Error {
     Unknown,
+    Connection,
     Canceled,
     InQueue,
     NotFound,
@@ -33,11 +34,11 @@ impl ContentRetriever for DefaultContentRetriever {
         F: Fn(u64, u64) -> Fut,
         Fut: Future<Output = bool>,
     {
-        let mut response = reqwest::get(&url).await.map_err(|_| Error::Unknown)?;
+        let mut response = reqwest::get(&url).await.map_err(|_| Error::Connection)?;
         let size = response.content_length().unwrap_or(0);
         let mime = response.headers().get("Content-Type").map(|x| x.to_str().unwrap_or("")).unwrap_or("").to_string();
         let mut length = 0;
-        while let Some(chunk) = response.chunk().await.map_err(|_| Error::Unknown)? {
+        while let Some(chunk) = response.chunk().await.map_err(|_| Error::Connection)? {
             writer.write_all(&chunk).map_err(|_| Error::Unknown)?;
             length += chunk.len() as u64;
             println!("Downloaded {} bytes / {} bytes", length, size);
@@ -78,6 +79,9 @@ pub trait Storage {
     async fn is_in_queue(&self, id: u32) -> bool;
 
     async fn get_files(&self, audio: &Audio) -> Result<ResponseFiles, Error>;
+
+    async fn remove(&self, id: u32) -> Result<(), Error>;
+
 }
 
 // #[derive(Debug)]
@@ -135,6 +139,8 @@ pub struct FileDownloader {
     downloading_dir: String,
     content_retriever: DefaultContentRetriever,
     queue: Mutex<Vec<u32>>,
+
+    cancel_broadcast: broadcast::Sender<u32>,
 }
 
 impl FileDownloader {
@@ -144,6 +150,8 @@ impl FileDownloader {
             downloading_dir,
             content_retriever: DefaultContentRetriever,
             queue: Mutex::new(Vec::new()),
+
+            cancel_broadcast: broadcast::channel(10).0,
         }
     }
 
@@ -155,15 +163,24 @@ impl FileDownloader {
         let downloading_dir = Path::new(&self.downloading_dir).join(audio.id.to_string());
         let mut file = tokio::fs::File::create(downloading_dir.join(filename)).await.map_err(|_| Error::Unknown)?;
         let mut bytes = Vec::new();
-        self.content_retriever.download(url, &mut bytes, |downloaded, total| {
+        let result = self.content_retriever.download(url, &mut bytes, |downloaded, total| {
             let callback = &callback;
             async move {
                 callback(downloaded, total).await;
                 self.is_in_queue(audio.id).await
             }
-        }).await?;
-        file.write_all(&bytes).await.map_err(|_| Error::Unknown)?;
-        Ok(())
+        }).await;
+        match result {
+            Ok(_) => {
+                file.write_all(&bytes).await.map_err(|_| Error::Unknown)?;
+                Ok(())
+            }
+            Err(Error::Canceled) => {
+                self.cancel_broadcast.send(audio.id).map_err(|_| Error::Unknown)?;
+                return Err(Error::Canceled);
+            }
+            Err(err) => {Err(err)},
+        }
     }
 }
 
@@ -206,5 +223,23 @@ impl Storage for FileDownloader {
         let thumbnail = tokio::fs::read(audio_dir.join("thumbnail.jpeg")).await.map_err(|_| Error::NotFound)?;
         let audio = tokio::fs::read(audio_dir.join("audio.webm")).await.map_err(|_| Error::NotFound)?;
         Ok(ResponseFiles { thumbnail, audio })
+    }
+    
+    async fn remove(&self, id: u32) -> Result<(), Error> {
+        if self.queue.lock().await.contains(&id) {
+            let mut rx = self.cancel_broadcast.subscribe();
+            self.queue.lock().await.retain(|x| *x != id);
+            loop {
+                let id = rx.recv().await.map_err(|_| Error::Unknown)?;
+                if id == id {
+                    break;
+                }
+            }
+        }
+        let audio_dir = Path::new(&self.audio_dir).join(id.to_string());
+        let downloading_dir = Path::new(&self.downloading_dir).join(id.to_string());
+        tokio::fs::remove_dir_all(audio_dir).await.map_err(|_| Error::Unknown)?;
+        tokio::fs::remove_dir_all(downloading_dir).await.map_err(|_| Error::Unknown)?;
+        Ok(())
     }
 }

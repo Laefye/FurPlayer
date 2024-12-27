@@ -3,7 +3,7 @@ import reactLogo from "./assets/react.svg";
 // import { addNewAudio, Audio, getPlaylistMetadata, loadAudio, AudioDTO, removeAudio } from "./Engine";
 import { Playlist } from "./Playlist";
 import { listen } from "@tauri-apps/api/event";
-import { addNewAudio, AudioDTO, getPlaylistMetadata, IndexedAudioDTO, loadAudio } from "./Engine";
+import { addNewAudio, AudioDTO, getPlaylistMetadata, IndexedAudioDTO, loadAudio, removeAudio } from "./Engine";
 
 
 function App() {
@@ -73,11 +73,11 @@ function App() {
   }
 
   async function _removeAudio(id: number) {
-    // await removeAudio(id);
-    // if (audioData.metadata.id == id) {
-    //   setAudioData(null);
-    // }
-    // setPlaylist(playlist.filter(metadata => metadata.id !== id));
+    await removeAudio(id);
+    if (audioData.id == id) {
+      setAudioData(null);
+    }
+    setPlaylist(playlist.filter(metadata => metadata.id !== id));
   }
 
   return (

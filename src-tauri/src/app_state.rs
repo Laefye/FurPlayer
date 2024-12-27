@@ -66,6 +66,7 @@ impl ToString for AppError {
                 downloader::Error::Canceled => "Download canceled".to_string(),
                 downloader::Error::InQueue => "Audio is already in queue".to_string(),
                 downloader::Error::NotFound => "Audio not found".to_string(),
+                downloader::Error::Connection => "Connection error".to_string(),
             },
             AppError::YtDlp(err) => match err {
                 ytdlp_wrapper::Error::Unknown => "Unknown error".to_string(),
@@ -124,12 +125,14 @@ impl AppState {
 
     pub async fn remove_audio(&mut self, id: u32) {
         self.playlist.remove_audio(id).await;
+        self.save_playlist().await;
+        let _ = self.downloader.remove(id).await;
     }
 
     pub fn download_audio(&self, audio: audio::Audio, content: YouTubeContentSource) {
         let downloader = self.downloader.clone();
         tokio::spawn(async move {
-            downloader.save(&audio, |_, _| {async {}}, RequestFiles::new(content.thumbnail, content.audio)).await.unwrap();
+            let _ = downloader.save(&audio, |_, _| {async {}}, RequestFiles::new(content.thumbnail, content.audio)).await;
         });
     }
 

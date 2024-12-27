@@ -43,9 +43,9 @@ export async function addNewAudio(url: string): Promise<AudioDTO> {
     }
 }
 
-// export async function removeAudio(id: number) {
-//     return await invoke("remove_audio", { id });
-// }
+export async function removeAudio(id: number) {
+    return await invoke("remove_audio", { id });
+}
 
 export async function loadAudio(id: number): Promise<AudioDTO | null> {
     return await invoke("load_audio", { id });
