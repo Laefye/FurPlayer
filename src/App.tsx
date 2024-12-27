@@ -42,6 +42,7 @@ function App() {
     setLoading(false);
     setPlaylist([...playlist, {id: audio.id, title: audio.title, author: audio.author, source: audio.source}]);
     setAudioData(audio);
+    setSelectedId(audio.id);
   }
 
   async function _loadAudio(id: number) {
