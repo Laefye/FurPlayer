@@ -1,5 +1,7 @@
 use std::{future::Future, io::Write, path::Path};
 
+use mime2ext::mime2ext;
+use serde::{Deserialize, Serialize};
 use tokio::{io::AsyncWriteExt, sync::{broadcast, Mutex}};
 
 use crate::audio::Audio;
@@ -59,7 +61,9 @@ pub struct RequestFiles {
 #[derive(Debug)]
 pub struct ResponseFiles {
     pub thumbnail: Vec<u8>,
+    pub thumbnail_mime: String,
     pub audio: Vec<u8>,
+    pub audio_mime: String,
 }
 
 impl RequestFiles {
@@ -84,56 +88,6 @@ pub trait Storage {
 
 }
 
-// #[derive(Debug)]
-// pub struct MemoryStorage<D: ContentRetriever> {
-//     map: Mutex<HashMap<u32, HashMap<String, Vec<u8>>>>,
-//     queue: Mutex<Vec<u32>>,
-//     content_retriever: D,
-// }
-
-// impl<D: ContentRetriever> MemoryStorage<D> {
-//     pub fn new(content_retriever: D) -> Self {
-//         Self {
-//             map: Mutex::new(HashMap::new()),
-//             queue: Mutex::new(Vec::new()),
-//             content_retriever,
-//         }
-//     }
-// }
-
-// impl<D: ContentRetriever> Storage for MemoryStorage<D> {
-//     async fn save<C, Fut>(&self, audio: &Audio, callback: C, downloads: HashMap<String, String>) -> Result<(), Error>
-//     where
-//         C: Fn(u64, u64) -> Fut,
-//         Fut: Future<Output = bool>
-//     {
-//         {
-//             let mut queue = self.queue.lock().await;
-//             if queue.contains(&audio.id) {
-//                 return Err(Error::InQueue);
-//             }
-//             queue.push(audio.id);
-//         }
-//         let mut downloaded = HashMap::new();
-//         for (filename, url) in downloads {
-//             let mut bytes = Vec::new();
-//             self.content_retriever.download(url, &mut bytes, &callback).await?;
-//             downloaded.insert(filename, bytes);
-//         }
-//         self.map.lock().await.insert(audio.id, downloaded);
-//         self.queue.lock().await.retain(|x| *x != audio.id);
-//         Ok(())
-//     }
-    
-//     async fn has_file(&self, audio: &Audio, file: String) -> bool {
-//         self.map.lock().await.get(&audio.id).map(|x| x.contains_key(&file)).unwrap_or(false)
-//     }
-    
-//     async fn is_in_queue(&self, id: u32) -> bool {
-//         self.queue.lock().await.contains(&id)
-//     }
-// }
-
 pub struct FileDownloader {
     audio_dir: String,
     downloading_dir: String,
@@ -155,7 +109,7 @@ impl FileDownloader {
         }
     }
 
-    async fn donwload_file<C, Fut>(&self, audio: &Audio, callback: C, url: String, filename: String) -> Result<(), Error>
+    async fn donwload_file<C, Fut>(&self, audio: &Audio, callback: C, url: String, filename: String) -> Result<Content, Error>
     where
         C: Fn(u64, u64) -> Fut,
         Fut: Future<Output = ()>,
@@ -171,9 +125,9 @@ impl FileDownloader {
             }
         }).await;
         match result {
-            Ok(_) => {
+            Ok(content) => {
                 file.write_all(&bytes).await.map_err(|_| Error::Unknown)?;
-                Ok(())
+                Ok(content)
             }
             Err(Error::Canceled) => {
                 self.cancel_broadcast.send(audio.id).map_err(|_| Error::Unknown)?;
@@ -182,6 +136,12 @@ impl FileDownloader {
             Err(err) => {Err(err)},
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Index {
+    media_mime: String,
+    thumbnail_mime: String,
 }
 
 impl Storage for FileDownloader {
@@ -201,17 +161,23 @@ impl Storage for FileDownloader {
         let downloading_dir = Path::new(&self.downloading_dir).join(audio.id.to_string());
         tokio::fs::create_dir_all(&audio_dir).await.map_err(|_| Error::Unknown)?;
         tokio::fs::create_dir_all(&downloading_dir).await.map_err(|_| Error::Unknown)?;
-        self.donwload_file(audio, &callback, downloads.thumbnail, "thumbnail.jpeg".to_string()).await?;
-        self.donwload_file(audio, &callback, downloads.audio, "audio.webm".to_string()).await?;
-        tokio::fs::rename(downloading_dir.join("thumbnail.jpeg"), audio_dir.join("thumbnail.jpeg")).await.map_err(|_| Error::Unknown)?;
-        tokio::fs::rename(downloading_dir.join("audio.webm"), audio_dir.join("audio.webm")).await.map_err(|_| Error::Unknown)?;
+        let thumbnail_content = self.donwload_file(audio, &callback, downloads.thumbnail, "thumbnail.bin".to_string()).await?;
+        let audio_content = self.donwload_file(audio, &callback, downloads.audio, "audio.bin".to_string()).await?;
+        tokio::fs::rename(downloading_dir.join("thumbnail.bin"), audio_dir.join(format!("thumbnail.{}", mime2ext(thumbnail_content.mime.clone()).unwrap_or("bin")))).await.map_err(|_| Error::Unknown)?;
+        tokio::fs::rename(downloading_dir.join("audio.bin"), audio_dir.join(format!("audio.{}", mime2ext(audio_content.mime.clone()).unwrap_or("bin")))).await.map_err(|_| Error::Unknown)?;
+        let index = Index {
+            media_mime: audio_content.mime,
+            thumbnail_mime: thumbnail_content.mime,
+        };
+        let index = serde_json::to_string(&index).map_err(|_| Error::Unknown)?;
+        tokio::fs::write(audio_dir.join("index.json"), index).await.map_err(|_| Error::Unknown)?;
         self.queue.lock().await.retain(|x| *x != audio.id);
         Ok(())
     }
     
     async fn has_file(&self, audio: &Audio) -> bool {
         let audio_dir = Path::new(&self.audio_dir).join(audio.id.to_string());
-        tokio::fs::metadata(audio_dir.join("thumbnail.jpeg")).await.is_ok() && tokio::fs::metadata(audio_dir.join("audio.webm")).await.is_ok()
+        audio_dir.join("index.json").exists()
     }
     
     async fn is_in_queue(&self, id: u32) -> bool {
@@ -220,9 +186,16 @@ impl Storage for FileDownloader {
     
     async fn get_files(&self, audio: &Audio) -> Result<ResponseFiles, Error> {
         let audio_dir = Path::new(&self.audio_dir).join(audio.id.to_string());
-        let thumbnail = tokio::fs::read(audio_dir.join("thumbnail.jpeg")).await.map_err(|_| Error::NotFound)?;
-        let audio = tokio::fs::read(audio_dir.join("audio.webm")).await.map_err(|_| Error::NotFound)?;
-        Ok(ResponseFiles { thumbnail, audio })
+        let index = tokio::fs::read(audio_dir.join("index.json")).await.map_err(|_| Error::NotFound)?;
+        let index = serde_json::from_slice::<Index>(&index).map_err(|_| Error::Unknown)?;
+        let thumbnail = tokio::fs::read(audio_dir.join(format!("thumbnail.{}", mime2ext(index.thumbnail_mime.clone()).unwrap_or("bin")))).await.map_err(|_| Error::NotFound)?;
+        let audio = tokio::fs::read(audio_dir.join(format!("audio.{}", mime2ext(index.media_mime.clone()).unwrap_or("bin")))).await.map_err(|_| Error::NotFound)?;
+        Ok(ResponseFiles {
+            thumbnail,
+            thumbnail_mime: index.thumbnail_mime,
+            audio,
+            audio_mime: index.media_mime,
+        })
     }
     
     async fn remove(&self, id: u32) -> Result<(), Error> {

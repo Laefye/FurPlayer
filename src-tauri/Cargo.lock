@@ -6,9 +6,9 @@ version = 4
 name = "FurPlayer"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "base64 0.22.1",
  "dirs",
+ "mime2ext",
  "rand 0.8.5",
  "reqwest",
  "serde",
@@ -2143,6 +2143,12 @@ name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6877bb514081ee2a7ff5ef9de3281f14a4dd4bceac4c09388074a6b5df8a139a"
+
+[[package]]
+name = "mime2ext"
+version = "0.1.53"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "515a63dc9666c865e848b043ab52fe9a5c713ae89cde4b5fbaae67cfd614b93a"
 
 [[package]]
 name = "miniz_oxide"

@@ -2,7 +2,7 @@ use std::{path::Path, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{audio::{self}, downloader::{self, FileDownloader, RequestFiles, Storage}, ytdlp_wrapper::{self, YouTubeContentSource}};
+use crate::{audio::{self, Source}, downloader::{self, FileDownloader, RequestFiles, Storage}, ytdlp_wrapper::{self, YouTubeContentSource}};
 
 pub struct AppState {
     playlist_path: String,
@@ -30,12 +30,17 @@ pub enum ContentDTO {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AudioSourceDTO {
+    YouTube(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioDTO {
     id: u32,
     content: ContentDTO,
     title: String,
     author: String,
-    source: String,
+    source: AudioSourceDTO,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,7 +48,7 @@ pub struct IndexedAudioDTO {
     id: u32,
     title: String,
     author: String,
-    source: String,
+    source: AudioSourceDTO,
 }
 
 impl From<(audio::Audio, String, String)> for AudioDTO {
@@ -53,7 +58,9 @@ impl From<(audio::Audio, String, String)> for AudioDTO {
             content: ContentDTO::Url{ thumbnail: value.1, media: value.2 },
             title: value.0.metadata.title,
             author: value.0.metadata.author,
-            source: value.0.metadata.source.to_string(),
+            source: match value.0.metadata.source {
+                Source::YouTube(url) => AudioSourceDTO::YouTube(url),
+            },
         }
     }
 }
@@ -145,18 +152,20 @@ impl AppState {
                     Some(
                         AudioDTO { id: audio.id,
                             content: ContentDTO::Local {
-                                thumbnail: FileDTO { bytes: files.thumbnail, mime: "image/jpeg".to_string() },
-                                media: FileDTO { bytes: files.audio, mime: "audio/webm".to_string() },
+                                thumbnail: FileDTO { bytes: files.thumbnail, mime: files.thumbnail_mime },
+                                media: FileDTO { bytes: files.audio, mime: files.audio_mime },
                             },
                             title: audio.metadata.title,
                             author: audio.metadata.author,
-                            source: audio.metadata.source.to_string(),
+                            source: match audio.metadata.source {
+                                Source::YouTube(url) => AudioSourceDTO::YouTube(url),
+                            },
                         }
                     )
                 } else {
                     let cloned = audio.clone();
                     match audio.metadata.source {
-                        audio::Source::YouTube(url) => {
+                        Source::YouTube(url) => {
                             let metadata = self.ytdlp.fetch(url.clone()).await.ok()?;
                             let content = metadata.get_content().ok()?;
                             if !self.downloader.is_in_queue(audio.id).await {
@@ -175,7 +184,14 @@ impl AppState {
         self.playlist.get_audios()
             .await
             .into_iter()
-            .map(|audio| IndexedAudioDTO { id: audio.id, title: audio.metadata.title.clone(), author: audio.metadata.author.clone(), source: audio.metadata.source.to_string() })
+            .map(|audio| IndexedAudioDTO {
+                id: audio.id,
+                title: audio.metadata.title.clone(),
+                author: audio.metadata.author.clone(),
+                source: match audio.metadata.source {
+                    Source::YouTube(url) => AudioSourceDTO::YouTube(url),
+                }
+            })
             .collect()
     }
 }
