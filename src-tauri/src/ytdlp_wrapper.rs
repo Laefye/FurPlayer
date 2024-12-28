@@ -1,11 +1,14 @@
+use std::time::{Duration, SystemTime};
+
 use serde::Deserialize;
-use tokio::process::Command;
+use tokio::{process::Command, sync::Mutex};
 
 pub struct YtDlp {
-    pub path: String,
+    path: String,
+    cache: Mutex<Vec<SavedMetadata>>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct YouTubeMetadata {
     pub id: String,
     pub title: String,
@@ -14,7 +17,7 @@ pub struct YouTubeMetadata {
     pub channel: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct YouTubeFormat {
     pub url: String,
     pub ext: String,
@@ -30,14 +33,34 @@ pub enum Error {
     NotAudio,
 }
 
+#[derive(Debug)]
+struct SavedMetadata {
+    date: SystemTime,
+    url: String,
+    metadata: YouTubeMetadata,
+}
+
 impl YtDlp {
     pub fn new(path: String) -> Self {
-        Self { path }
+        Self {
+            path,
+            cache: Mutex::new(Vec::new()),
+        }
     }
 
     pub async fn fetch(&self, url: String) -> Result<YouTubeMetadata, Error> {
         if !url.starts_with("https://www.youtube.com/watch?v=") && !url.starts_with("https://youtu.be/") && !url.starts_with("https://youtube.com/watch?v=") {
             return Err(Error::BadLink);
+        }
+        {
+            let cache = self.cache.lock().await;
+            let cached = cache.iter()
+                .filter(|c| c.url == url)
+                .filter(|c| SystemTime::now().duration_since(c.date).unwrap() < Duration::from_secs(60 * 5))
+                .next();
+            if let Some(cached) = cached {
+                return Ok(cached.metadata.clone());
+            }
         }
         let mut cmd = Command::new(&self.path);
         // Костыльный костыль
@@ -61,7 +84,9 @@ impl YtDlp {
             };
         }
         let stdout = String::from_utf8(output.stdout).map_err(|_| Error::Unknown)?;
-        serde_json::from_str(&stdout).map_err(|_| Error::Unknown)
+        let metadata = serde_json::from_str::<YouTubeMetadata>(&stdout).map_err(|_| Error::Unknown)?;
+        self.cache.lock().await.push(SavedMetadata { date: SystemTime::now(), url, metadata: metadata.clone() });
+        Ok(metadata)
     }
 }
 

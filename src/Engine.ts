@@ -29,11 +29,11 @@ export type IndexedAudioDTO = {
 }
 
 
-export async function getPlaylistMetadata(): Promise<AudioDTO[]> {
+export async function getPlaylistMetadata(): Promise<IndexedAudioDTO[]> {
     return await invoke("get_playlist_metadata");
 }
 
-export async function addNewAudio(url: string): Promise<AudioDTO> {
+export async function addNewAudio(url: string): Promise<IndexedAudioDTO> {
     try {
         return await invoke("add_new_audio", { url });
     } catch (e) {
@@ -47,4 +47,12 @@ export async function removeAudio(id: number) {
 
 export async function loadAudio(id: number): Promise<AudioDTO | null> {
     return await invoke("load_audio", { id });
+}
+
+export async function getMedia(id: number): Promise<ContentDTO> {
+    return await invoke("get_media", { id });
+}
+
+export async function getThumbnail(id: number): Promise<ContentDTO> {
+    return await invoke("get_thumbnail", { id });
 }

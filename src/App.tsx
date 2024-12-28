@@ -3,7 +3,7 @@ import reactLogo from "./assets/react.svg";
 // import { addNewAudio, Audio, getPlaylistMetadata, loadAudio, AudioDTO, removeAudio } from "./Engine";
 import { Playlist } from "./Playlist";
 import { listen } from "@tauri-apps/api/event";
-import { addNewAudio, AudioDTO, getPlaylistMetadata, IndexedAudioDTO, loadAudio, removeAudio } from "./Engine";
+import { addNewAudio, AudioDTO, getMedia, getPlaylistMetadata, getThumbnail, IndexedAudioDTO, loadAudio, removeAudio } from "./Engine";
 
 
 function App() {
@@ -47,14 +47,29 @@ function App() {
     let audio = await addNewAudio(url);
     setLoading(false);
     setPlaylist([...playlist, {id: audio.id, title: audio.title, author: audio.author, source: audio.source}]);
-    setAudioData(audio);
+    setAudioData({
+      id: audio.id,
+      author: audio.author,
+      media: await getMedia(audio.id),
+      thumbnail: await getThumbnail(audio.id),
+      source: audio.source,
+      title: audio.title,
+    });
     setSelectedId(audio.id);
   }
 
   async function _loadAudio(id: number) {
     setLoading(true);
     setSelectedId(id);
-    let audio = await loadAudio(id);
+    let indexedAudio = playlist.find(x => x.id == id);
+    let audio: AudioDTO = {
+      id: indexedAudio.id,
+      author: indexedAudio.author,
+      media: await getMedia(indexedAudio.id),
+      thumbnail: await getThumbnail(indexedAudio.id),
+      source: indexedAudio.source,
+      title: indexedAudio.title,
+    }
     setLoading(false);
     setAudioData(audio);
   }

@@ -30,36 +30,11 @@ pub enum AudioSourceDTO {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AudioDTO {
-    id: u32,
-    thumbnail: ContentDTO,
-    media: ContentDTO,
-    title: String,
-    author: String,
-    source: AudioSourceDTO,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IndexedAudioDTO {
     id: u32,
     title: String,
     author: String,
     source: AudioSourceDTO,
-}
-
-impl From<(audio::Audio, String, String)> for AudioDTO {
-    fn from(value: (audio::Audio, String, String)) -> Self {
-        Self {
-            id: value.0.id,
-            thumbnail: ContentDTO::Url(value.1),
-            media: ContentDTO::Url(value.2),
-            title: value.0.metadata.title,
-            author: value.0.metadata.author,
-            source: match value.0.metadata.source {
-                Source::YouTube(url) => AudioSourceDTO::YouTube(url),
-            },
-        }
-    }
 }
 
 impl ToString for AppError {
@@ -113,14 +88,21 @@ impl AppState {
         }
     }
 
-    pub async fn add_new_audio(&mut self, url: String) -> Result<AudioDTO, AppError> {
+    pub async fn add_new_audio(&mut self, url: String) -> Result<IndexedAudioDTO, AppError> {
         let metadata = self.ytdlp.fetch(url.clone()).await.map_err(AppError::YtDlp)?;
         let content = metadata.get_content().map_err(AppError::YtDlp)?;
         let audio = audio::Audio::create(metadata.title, metadata.channel, audio::Source::YouTube(format!("https://www.youtube.com/watch?v={}", metadata.id)));
         self.playlist.add_audio(audio.clone()).await;
         self.save_playlist().await;
         self.download_audio(audio.clone(), content.clone());
-        Ok((audio, content.thumbnail, content.media).into())
+        Ok(IndexedAudioDTO {
+            id: audio.id,
+            title: audio.metadata.title.clone(),
+            author: audio.metadata.author,
+            source: match &audio.metadata.source {
+                Source::YouTube(url) => AudioSourceDTO::YouTube(url.clone()),
+            },
+        })
     }
 
     pub async fn save_playlist(&self) {
@@ -140,53 +122,51 @@ impl AppState {
         });
     }
 
-    pub async fn get_audio(&self, id: u32) -> Option<AudioDTO> {
-        let audio = self.playlist.get_audio(id).await;
-        match audio {
-            Some(audio) => {
-                if self.downloader.has_file(&audio).await {
-                    let files = self.downloader.get_files(&audio).await.unwrap();
-                    Some(
-                        AudioDTO { id: audio.id,
-                            thumbnail: ContentDTO::Local { bytes: files.thumbnail, mime: files.thumbnail_mime },
-                            media: ContentDTO::Local { bytes: files.media, mime: files.media_mime },
-                            title: audio.metadata.title,
-                            author: audio.metadata.author,
-                            source: match audio.metadata.source {
-                                Source::YouTube(url) => AudioSourceDTO::YouTube(url),
-                            },
-                        }
-                    )
-                } else {
-                    let cloned = audio.clone();
-                    match audio.metadata.source {
-                        Source::YouTube(url) => {
-                            let metadata = self.ytdlp.fetch(url.clone()).await.ok()?;
-                            let content = metadata.get_content().ok()?;
-                            if !self.downloader.is_in_queue(audio.id).await {
-                                self.download_audio(cloned.clone(), content.clone());
-                            }
-                            Some((cloned, content.thumbnail, content.media).into())
-                        },
-                    }
-                }
-            },
-            None => None,
+    pub async fn get_all_audios(&self) -> Result<Vec<IndexedAudioDTO>, AppError> {
+        let audios = self.playlist.get_audios().await;
+        let mut indexed_audios = Vec::new();
+        for audio in audios.iter()  {
+            indexed_audios.push(IndexedAudioDTO {
+                id: audio.id,
+                author: audio.metadata.author.clone(),
+                source: match &audio.metadata.source {
+                    Source::YouTube(youtube) => AudioSourceDTO::YouTube(youtube.clone()),
+                },
+                title: audio.metadata.title.clone(),
+            });
+        }
+        Ok(indexed_audios)
+    }
+
+    pub async fn get_thumbnail(&self, id: u32) -> Result<ContentDTO, AppError> {
+        let audio = self.playlist.get_audio(id).await.ok_or(AppError::Downloader(downloader::Error::NotFound))?;
+        if self.downloader.has_file(&audio).await {
+            let content = self.downloader.get_files(&audio).await.map_err(AppError::Downloader)?;
+            Ok(ContentDTO::Local { bytes: content.thumbnail, mime: content.thumbnail_mime })
+        } else {
+            match &audio.metadata.source {
+                Source::YouTube(url) => {
+                    let metadata = self.ytdlp.fetch(url.clone()).await.map_err(AppError::YtDlp)?;
+                    let content = metadata.get_content().map_err(AppError::YtDlp)?;
+                    Ok(ContentDTO::Url(content.thumbnail))
+                },
+            }
         }
     }
 
-    pub async fn get_all_audios(&self) -> Vec<IndexedAudioDTO> {
-        self.playlist.get_audios()
-            .await
-            .into_iter()
-            .map(|audio| IndexedAudioDTO {
-                id: audio.id,
-                title: audio.metadata.title.clone(),
-                author: audio.metadata.author.clone(),
-                source: match audio.metadata.source {
-                    Source::YouTube(url) => AudioSourceDTO::YouTube(url),
-                }
-            })
-            .collect()
+    pub async fn get_media(&self, id: u32) -> Result<ContentDTO, AppError> {
+        let audio = self.playlist.get_audio(id).await.ok_or(AppError::Downloader(downloader::Error::NotFound))?;
+        if self.downloader.has_file(&audio).await {
+            let content = self.downloader.get_files(&audio).await.map_err(AppError::Downloader)?;
+            Ok(ContentDTO::Local { bytes: content.media, mime: content.media_mime })
+        } else {
+            match &audio.metadata.source {
+                Source::YouTube(url) => {
+                    let metadata = self.ytdlp.fetch(url.clone()).await.map_err(AppError::YtDlp)?;
+                    let content = metadata.get_content().map_err(AppError::YtDlp)?;
+                    Ok(ContentDTO::Url(content.media))
+                },
+            }
+        }
     }
 }

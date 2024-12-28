@@ -1,5 +1,5 @@
 
-use app_state::{AppState, AudioDTO, IndexedAudioDTO};
+use app_state::{AppState, ContentDTO, IndexedAudioDTO};
 use tauri::{Manager, State};
 use tokio::sync::Mutex;
 
@@ -10,7 +10,7 @@ mod downloader;
 
 
 #[tauri::command]
-async fn add_new_audio(state: State<'_, Mutex<AppState>>, url: String) -> Result<AudioDTO, String> {
+async fn add_new_audio(state: State<'_, Mutex<AppState>>, url: String) -> Result<IndexedAudioDTO, String> {
     let mut state = state.lock().await;
     let audio = state.add_new_audio(url).await;
     match audio {
@@ -20,16 +20,9 @@ async fn add_new_audio(state: State<'_, Mutex<AppState>>, url: String) -> Result
 }
 
 #[tauri::command]
-async fn load_audio(state: State<'_, Mutex<AppState>>, id: u32) -> Result<Option<AudioDTO>, String> {
-    let state = state.lock().await;
-    let audio = state.get_audio(id).await;
-    Ok(audio)
-}
-
-#[tauri::command]
 async fn get_playlist_metadata(state: State<'_, Mutex<AppState>>) -> Result<Vec<IndexedAudioDTO>, String> {
     let state = state.lock().await;
-    Ok(state.get_all_audios().await)
+    state.get_all_audios().await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -37,6 +30,18 @@ async fn remove_audio(state: State<'_, Mutex<AppState>>, id: u32) -> Result<(), 
     let mut state = state.lock().await;
     state.remove_audio(id).await;
     Ok(())
+}
+
+#[tauri::command]
+async fn get_thumbnail(state: State<'_, Mutex<AppState>>, id: u32) -> Result<ContentDTO, String> {
+    let state = state.lock().await;
+    state.get_thumbnail(id).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn get_media(state: State<'_, Mutex<AppState>>, id: u32) -> Result<ContentDTO, String> {
+    let state = state.lock().await;
+    state.get_media(id).await.map_err(|e| e.to_string())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -47,7 +52,7 @@ pub fn run() {
             Ok(())
         })
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![add_new_audio, get_playlist_metadata, load_audio, remove_audio])
+        .invoke_handler(tauri::generate_handler![add_new_audio, get_playlist_metadata, remove_audio, get_media, get_thumbnail])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
