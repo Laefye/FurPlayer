@@ -1,6 +1,7 @@
 use std::{future::Future, io::Write, path::Path};
 
 use mime2ext::mime2ext;
+use reqwest::Method;
 use serde::{Deserialize, Serialize};
 use tokio::{io::AsyncWriteExt, sync::{broadcast, Mutex}};
 
@@ -21,7 +22,7 @@ pub enum Error {
 }
 
 pub trait ContentRetriever {
-    async fn download<F, Fut>(&self, url: String, writer: &mut impl Write, callback: F) -> Result<Content, Error>
+    async fn download<F, Fut>(&self, url: String, writer: &mut impl Write, callback: F, skip: usize) -> Result<Content, Error>
     where
         F: Fn(u64, u64) -> Fut,
         Fut: Future<Output = bool>;
@@ -31,12 +32,18 @@ pub trait ContentRetriever {
 pub struct DefaultContentRetriever;
 
 impl ContentRetriever for DefaultContentRetriever {
-    async fn download<F, Fut>(&self, url: String, writer: &mut impl Write, callback: F) -> Result<Content, Error>
+    async fn download<F, Fut>(&self, url: String, writer: &mut impl Write, callback: F, skip: usize) -> Result<Content, Error>
     where
         F: Fn(u64, u64) -> Fut,
         Fut: Future<Output = bool>,
     {
-        let mut response = reqwest::get(&url).await.map_err(|_| Error::Connection)?;
+        let mut request = reqwest::Client::new().request(Method::GET, url);
+        if skip > 0 {
+            request = request.header("Range", format!("bytes={}-", skip));
+        }
+        let mut response = request.send()
+            .await
+            .map_err(|_| Error::Connection)?;
         let size = response.content_length().unwrap_or(0);
         let mime = response.headers().get("Content-Type").map(|x| x.to_str().unwrap_or("")).unwrap_or("").to_string();
         let mut length = 0;
@@ -117,13 +124,23 @@ impl FileDownloader {
         let downloading_dir = Path::new(&self.downloading_dir).join(audio.id.to_string());
         let mut file = tokio::fs::File::create(downloading_dir.join(filename)).await.map_err(|_| Error::Unknown)?;
         let mut bytes = Vec::new();
-        let result = self.content_retriever.download(url, &mut bytes, |downloaded, total| {
-            let callback = &callback;
-            async move {
-                callback(downloaded, total).await;
-                self.is_in_queue(audio.id).await
+        let mut result = Err(Error::Unknown);
+        for attempt in 0..5 {
+            println!("Attempt: {}", attempt);
+            let len = bytes.len();
+            result = self.content_retriever.download(url.clone(), &mut bytes, |downloaded, total| {
+                let callback = &callback;
+                async move {
+                    callback(downloaded, total).await;
+                    self.is_in_queue(audio.id).await
+                }
+            }, len).await;
+            match &result {
+                Err(Error::Canceled) => { break; },
+                Ok(_) => { break; }
+                _ => {},
             }
-        }).await;
+        }
         match result {
             Ok(content) => {
                 file.write_all(&bytes).await.map_err(|_| Error::Unknown)?;

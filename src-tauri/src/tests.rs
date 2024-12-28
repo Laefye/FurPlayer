@@ -40,7 +40,7 @@ async fn downloader_test() {
         }
     };
     let mut bytes = Vec::new();
-    let source = downloader.download("https://raw.githubusercontent.com/Laefye/FurPlayer/refs/heads/main/LICENSE".to_string(), &mut bytes, d).await;
+    let source = downloader.download("https://raw.githubusercontent.com/Laefye/FurPlayer/refs/heads/main/LICENSE".to_string(), &mut bytes, d, 0).await;
     assert!(source.is_ok());
     let source = source.unwrap();
     assert!(source.mime.contains("text/plain"));
@@ -56,7 +56,7 @@ async fn downloader_cancel_test() {
         }
     };
     let mut bytes = Vec::new();
-    let source = downloader.download("https://raw.githubusercontent.com/Laefye/FurPlayer/refs/heads/main/LICENSE".to_string(), &mut bytes, d).await;
+    let source = downloader.download("https://raw.githubusercontent.com/Laefye/FurPlayer/refs/heads/main/LICENSE".to_string(), &mut bytes, d, 0).await;
     assert!(source.is_err());
     assert!(matches!(source.unwrap_err(), crate::downloader::Error::Canceled));
 }

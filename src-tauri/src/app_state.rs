@@ -164,6 +164,7 @@ impl AppState {
                 Source::YouTube(url) => {
                     let metadata = self.ytdlp.fetch(url.clone()).await.map_err(AppError::YtDlp)?;
                     let content = metadata.get_content().map_err(AppError::YtDlp)?;
+                    self.download_audio(audio, content.clone());
                     Ok(ContentDTO::Url(content.media))
                 },
             }
