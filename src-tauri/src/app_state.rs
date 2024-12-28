@@ -88,7 +88,7 @@ impl AppState {
         }
     }
 
-    pub async fn add_new_audio(&mut self, url: String) -> Result<IndexedAudioDTO, AppError> {
+    pub async fn add_new_audio(&self, url: String) -> Result<IndexedAudioDTO, AppError> {
         let metadata = self.ytdlp.fetch(url.clone()).await.map_err(AppError::YtDlp)?;
         let content = metadata.get_content().map_err(AppError::YtDlp)?;
         let audio = audio::Audio::create(metadata.title, metadata.channel, audio::Source::YouTube(format!("https://www.youtube.com/watch?v={}", metadata.id)));
@@ -109,7 +109,7 @@ impl AppState {
         let _ = self.playlist.save(audio::PlaylistIOImpl(self.playlist_path.clone())).await;
     }
 
-    pub async fn remove_audio(&mut self, id: u32) {
+    pub async fn remove_audio(&self, id: u32) {
         self.playlist.remove_audio(id).await;
         self.save_playlist().await;
         let _ = self.downloader.remove(id).await;

@@ -1,7 +1,8 @@
 
+use std::sync::Arc;
+
 use app_state::{AppState, ContentDTO, IndexedAudioDTO};
 use tauri::{Manager, State};
-use tokio::sync::Mutex;
 
 mod app_state;
 mod audio;
@@ -10,8 +11,7 @@ mod downloader;
 
 
 #[tauri::command]
-async fn add_new_audio(state: State<'_, Mutex<AppState>>, url: String) -> Result<IndexedAudioDTO, String> {
-    let mut state = state.lock().await;
+async fn add_new_audio(state: State<'_, Arc<AppState>>, url: String) -> Result<IndexedAudioDTO, String> {
     let audio = state.add_new_audio(url).await;
     match audio {
         Ok(audio) => Ok(audio),
@@ -20,27 +20,26 @@ async fn add_new_audio(state: State<'_, Mutex<AppState>>, url: String) -> Result
 }
 
 #[tauri::command]
-async fn get_playlist_metadata(state: State<'_, Mutex<AppState>>) -> Result<Vec<IndexedAudioDTO>, String> {
-    let state = state.lock().await;
+async fn get_playlist_metadata(state: State<'_, Arc<AppState>>) -> Result<Vec<IndexedAudioDTO>, String> {
     state.get_all_audios().await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-async fn remove_audio(state: State<'_, Mutex<AppState>>, id: u32) -> Result<(), ()> {
-    let mut state = state.lock().await;
-    state.remove_audio(id).await;
+async fn remove_audio(state: State<'_, Arc<AppState>>, id: u32) -> Result<(), ()> {
+    let cloned = state.inner().clone();
+    tokio::spawn(async move {
+        cloned.remove_audio(id).await
+    });
     Ok(())
 }
 
 #[tauri::command]
-async fn get_thumbnail(state: State<'_, Mutex<AppState>>, id: u32) -> Result<ContentDTO, String> {
-    let state = state.lock().await;
+async fn get_thumbnail(state: State<'_, Arc<AppState>>, id: u32) -> Result<ContentDTO, String> {
     state.get_thumbnail(id).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-async fn get_media(state: State<'_, Mutex<AppState>>, id: u32) -> Result<ContentDTO, String> {
-    let state = state.lock().await;
+async fn get_media(state: State<'_, Arc<AppState>>, id: u32) -> Result<ContentDTO, String> {
     state.get_media(id).await.map_err(|e| e.to_string())
 }
 
@@ -48,7 +47,7 @@ async fn get_media(state: State<'_, Mutex<AppState>>, id: u32) -> Result<Content
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
-            app.manage(Mutex::new(AppState::new()));
+            app.manage(Arc::new(AppState::new()));
             Ok(())
         })
         .plugin(tauri_plugin_opener::init())
