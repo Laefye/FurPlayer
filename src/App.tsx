@@ -18,14 +18,20 @@ function App() {
 
   useEffect(() => {
     if (audioData) {
-      if (audioData.content.Url) {
-        setThumbnail(audioData.content.Url.thumbnail);
-        setAudio(audioData.content.Url.media);
-      } else if (audioData.content.Local) {
-        setThumbnail(URL.createObjectURL(new Blob([new Uint8Array(audioData.content.Local.thumbnail.bytes)], { type: audioData.content.Local.thumbnail.mime })));
-        setAudio(URL.createObjectURL(new Blob([new Uint8Array(audioData.content.Local.media.bytes)], { type: audioData.content.Local.media.mime })));
+      if (audioData.thumbnail.Url) {
+        setThumbnail(audioData.thumbnail.Url);
+      } else if (audioData.thumbnail.Local) {
+        setThumbnail(
+          URL.createObjectURL(new Blob([new Uint8Array(audioData.thumbnail.Local.bytes)], { type: audioData.thumbnail.Local.mime }))
+        );
       }
-
+      if (audioData.media.Url) {
+        setAudio(audioData.media.Url);
+      } else if (audioData.media.Local) {
+        setAudio(
+          URL.createObjectURL(new Blob([new Uint8Array(audioData.media.Local.bytes)], { type: audioData.media.Local.mime }))
+        );
+      }
     }
   }, [audioData]);
 

@@ -1,5 +1,13 @@
 import { invoke } from "@tauri-apps/api/core"
 
+export type ContentDTO = {
+    Url?: string,
+    Local?: {
+        bytes: number[],
+        mime: string,
+    }
+}
+
 export type AudioDTO = {
     id: number,
     title: string,
@@ -7,22 +15,8 @@ export type AudioDTO = {
     source: {
         YouTube?: string,
     },
-    content: {
-        Url?: {
-            thumbnail: string,
-            media: string,
-        }
-        Local?: {
-            thumbnail: {
-                mime: string,
-                bytes: number[],
-            },
-            media: {
-                mime: string,
-                bytes: number[],
-            }
-        }
-    }
+    thumbnail: ContentDTO,
+    media: ContentDTO,
 }
 
 export type IndexedAudioDTO = {

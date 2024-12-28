@@ -18,16 +18,11 @@ pub enum AppError {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FileDTO {
-    pub bytes: Vec<u8>,
-    pub mime: String,
+pub enum ContentDTO {
+    Url(String),
+    Local{bytes: Vec<u8>, mime: String},
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ContentDTO {
-    Url{ thumbnail: String, media: String },
-    Local{ thumbnail: FileDTO, media: FileDTO },
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AudioSourceDTO {
@@ -37,7 +32,8 @@ pub enum AudioSourceDTO {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioDTO {
     id: u32,
-    content: ContentDTO,
+    thumbnail: ContentDTO,
+    media: ContentDTO,
     title: String,
     author: String,
     source: AudioSourceDTO,
@@ -55,7 +51,8 @@ impl From<(audio::Audio, String, String)> for AudioDTO {
     fn from(value: (audio::Audio, String, String)) -> Self {
         Self {
             id: value.0.id,
-            content: ContentDTO::Url{ thumbnail: value.1, media: value.2 },
+            thumbnail: ContentDTO::Url(value.1),
+            media: ContentDTO::Url(value.2),
             title: value.0.metadata.title,
             author: value.0.metadata.author,
             source: match value.0.metadata.source {
@@ -151,10 +148,8 @@ impl AppState {
                     let files = self.downloader.get_files(&audio).await.unwrap();
                     Some(
                         AudioDTO { id: audio.id,
-                            content: ContentDTO::Local {
-                                thumbnail: FileDTO { bytes: files.thumbnail, mime: files.thumbnail_mime },
-                                media: FileDTO { bytes: files.media, mime: files.media_mime },
-                            },
+                            thumbnail: ContentDTO::Local { bytes: files.thumbnail, mime: files.thumbnail_mime },
+                            media: ContentDTO::Local { bytes: files.media, mime: files.media_mime },
                             title: audio.metadata.title,
                             author: audio.metadata.author,
                             source: match audio.metadata.source {
