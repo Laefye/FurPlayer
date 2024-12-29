@@ -6,7 +6,7 @@ use tauri::{Manager, State};
 
 mod app_state;
 mod audio;
-mod ytdlp_wrapper;
+mod ytdlp;
 mod downloader;
 
 

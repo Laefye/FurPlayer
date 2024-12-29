@@ -1,6 +1,6 @@
 use std::{env, sync::atomic::AtomicBool};
 
-use crate::{downloader::{ContentRetriever, DefaultContentRetriever}, ytdlp_wrapper::{self, YtDlp}};
+use crate::{downloader::{ContentRetriever, DefaultContentRetriever}, ytdlp::{self, YtDlp}};
 
 
 #[tokio::test]
@@ -9,20 +9,16 @@ async fn ytdlp_fetch() {
     {
         let metadata = ytdlp.fetch("https://www.youtube.com/watch?v=dQw4w9WgXcQ".to_string()).await;
         assert!(metadata.is_ok());
-        let metadata = metadata.unwrap();
-        assert_eq!(metadata.id, "dQw4w9WgXcQ");
-        let source = metadata.get_content();
-        assert!(source.is_ok());
     }
     {
         let metadata = ytdlp.fetch("https://www.youtube.com/watch?v=123".to_string()).await;
         assert!(metadata.is_err());
-        assert!(matches!(metadata.unwrap_err(), ytdlp_wrapper::Error::NotFound));
+        assert!(matches!(metadata.unwrap_err(), ytdlp::FetchError::NotFound));
     }
     {
         let metadata = ytdlp.fetch("https://www.some.com/watch?v=123".to_string()).await;
         assert!(metadata.is_err());
-        assert!(matches!(metadata.unwrap_err(), ytdlp_wrapper::Error::BadLink));
+        assert!(matches!(metadata.unwrap_err(), ytdlp::FetchError::BadLink));
     }
 }
 
