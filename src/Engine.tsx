@@ -231,6 +231,20 @@ type ContextType = {
 
 const Context = createContext<ContextType | undefined>(undefined);
 
+export class FetchAudioError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = "FetchAudioError";
+    }
+}
+
+export class NotFoundError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = "NotFoundError";
+    }
+}
+
 export function EngineContext({children}: {children: ReactNode}) {
     let [engine, setEngine] = useState<Engine>(new Engine());
     let [playlist, setPlaylist] = useState<IndexedAudioDTO[]>([]);
@@ -264,9 +278,20 @@ export function EngineContext({children}: {children: ReactNode}) {
         thumbnails,
         addAudio: async (url: string) => {
             setState('fetching_audio');
-            await engine.addAudio(url);
-            setPlaylist(engine.playlist);
-            setState('idle');
+            try {
+                await engine.addAudio(url);
+                setPlaylist(engine.playlist);
+                setState('idle');
+            } catch (error) {
+                setState('idle');
+                if (error === 'Bad link') {
+                    throw new FetchAudioError("The link provided is not a valid link");
+                } else if (error === 'Not found') {
+                    throw new NotFoundError("The link provided does not point to a valid audio");
+                } else {
+                    throw error;
+                }
+            }
         },
         removeAudio: async (id: number) => {
             await engine.removeAudio(id);

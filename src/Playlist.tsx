@@ -12,7 +12,7 @@ export function Playlist() {
                     { (thumbnails != null && audio.id in thumbnails) && (<Thumbnail className="w-14 h-14" src={thumbnails[audio.id]}/>)}
                     <div className="flex flex-col">
                         <span>{audio.title}</span>
-                        <span>{audio.author}</span>
+                        <span className="text-gray-400">{audio.author}</span>
                     </div>
                 </button>
                 <button className="ml-4 px-2 py-2 self-center bg-blue-500 text-white rounded hover:bg-blue-600 transition" onClick={() => removeAudio(audio.id)}>
