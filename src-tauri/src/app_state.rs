@@ -83,7 +83,21 @@ impl AppState {
         } else {
             dirs::config_dir().unwrap().join("FurPlayer").to_str().unwrap().to_string()
         };
-        let ytdlp_path = std::env::current_exe().unwrap().parent().unwrap().to_path_buf().join("utils").join("yt-dlp.exe").to_str().unwrap().to_string();
+        let ytdlp_path;
+        #[cfg(target_arch = "x86_64")]
+        {
+            #[cfg(target_os = "windows")]
+            {
+                ytdlp_path = std::env::current_exe().unwrap().parent().unwrap().to_path_buf().join("utils").join("yt-dlp.exe").to_str().unwrap().to_string();
+            }
+            #[cfg(target_os = "linux")]
+            {
+                ytdlp_path = std::env::current_exe().unwrap().parent().unwrap().to_path_buf().join("utils").join("yt-dlp_linux").to_str().unwrap().to_string();
+                let mut metadata = fs::metadata(ytdlp_path.clone()).unwrap().permissions();
+                metadata.set_mode(0o775);
+                fs::set_permissions(ytdlp_path.clone(), metadata).unwrap();
+            }
+        }
         let ytdlp_wrapper = ytdlp_wrapper::YtDlp::new(ytdlp_path);
         let playlist_path = Path::new(&config_dir).join("playlist.json");
         let playlist;
