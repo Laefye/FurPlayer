@@ -12,16 +12,11 @@ impl ToString for Source {
 }
 
 #[derive(Debug, Clone)]
-pub struct Metadata {
+pub struct Audio {
+    pub id: u32,
     pub title: String,
     pub author: String,
     pub source: Source,
-}
-
-#[derive(Debug, Clone)]
-pub struct Audio {
-    pub id: u32,
-    pub metadata: Metadata,
 }
 
 mod playlist;
@@ -33,11 +28,9 @@ impl Audio {
     pub fn create(title: String, author: String, source: Source) -> Self {
         Self {
             id: rand::random(),
-            metadata: Metadata {
-                title,
-                author,
-                source,
-            },
+            title,
+            author,
+            source,
         }
     }
 }

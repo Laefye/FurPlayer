@@ -42,9 +42,9 @@ impl From<Audio> for IndexedAudioDTO {
     fn from(value: Audio) -> Self {
         Self {
             id: value.id,
-            title: value.metadata.title,
-            author: value.metadata.author,
-            source: match value.metadata.source {
+            title: value.title,
+            author: value.author,
+            source: match value.source {
                 Source::YouTube(url) => AudioSourceDTO::YouTube(url),
             }
         }
@@ -146,11 +146,11 @@ impl AppState {
         for audio in audios.iter()  {
             indexed_audios.push(IndexedAudioDTO {
                 id: audio.id,
-                author: audio.metadata.author.clone(),
-                source: match &audio.metadata.source {
+                author: audio.author.clone(),
+                source: match &audio.source {
                     Source::YouTube(youtube) => AudioSourceDTO::YouTube(youtube.clone()),
                 },
-                title: audio.metadata.title.clone(),
+                title: audio.title.clone(),
             });
         }
         Ok(indexed_audios)
@@ -162,7 +162,7 @@ impl AppState {
             let content = self.downloader.get_files(&audio).await.map_err(AppError::Downloader)?;
             Ok(ContentDTO::Local { bytes: content.thumbnail, mime: content.thumbnail_mime })
         } else {
-            match &audio.metadata.source {
+            match &audio.source {
                 Source::YouTube(url) => {
                     let details = self.ytdlp.fetch(url.clone()).await.map_err(AppError::YtDlp)?;
                     Ok(ContentDTO::Url(details.thumbnail))
@@ -177,7 +177,7 @@ impl AppState {
             let content = self.downloader.get_files(&audio).await.map_err(AppError::Downloader)?;
             Ok(ContentDTO::Local { bytes: content.media, mime: content.media_mime })
         } else {
-            match &audio.metadata.source {
+            match &audio.source {
                 Source::YouTube(url) => {
                     let details = self.ytdlp.fetch(url.clone()).await.map_err(AppError::YtDlp)?;
                     self.download_audio(audio, details.thumbnail, details.media.clone());

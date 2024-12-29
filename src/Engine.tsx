@@ -97,7 +97,12 @@ export default class Engine {
                     listener(payload.StartDownload);
                 }
             } else if (payload.FinishedDownload) {
-                this._downloads[payload.FinishedDownload.audio.id].state = 'finished';
+                this._downloads[payload.FinishedDownload.audio.id] = {
+                    state: 'finished',
+                    error: null,
+                    progress: undefined,
+                    audio: payload.FinishedDownload.audio,
+                }
                 for (const listener of this.listeners['download']) {
                     listener(payload.FinishedDownload);
                 }
@@ -112,9 +117,14 @@ export default class Engine {
                     listener(payload.ErrorDownload);
                 }
             } else if (payload.Download) {
-                this._downloads[payload.Download.audio.id].progress = {
-                    total: payload.Download.total,
-                    downloaded: payload.Download.downloaded,
+                this._downloads[payload.Download.audio.id] = {
+                    state: 'downloading',
+                    error: null,
+                    progress: {
+                        downloaded: payload.Download.downloaded,
+                        total: payload.Download.total,
+                    },
+                    audio: payload.Download.audio,
                 }
                 for (const listener of this.listeners['download']) {
                     listener(payload.Download);

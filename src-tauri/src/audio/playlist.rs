@@ -89,13 +89,11 @@ impl PlaylistIO<PlaylistIOImpl> for PlaylistIOImpl {
         let playlist_dto: PlaylistDTO = serde_json::from_str(&serialized).map_err(|_| LoadError::Unknown)?;
         let audios = playlist_dto.audios.iter().map(|audio| Audio {
             id: audio.id,
-            metadata: super::Metadata {
-                title: audio.title.clone(),
-                source: match &audio.source {
-                    LocalSource::YouTube(url) => Source::YouTube(url.clone()),
-                },
-                author: audio.author.clone(),
+            title: audio.title.clone(),
+            source: match &audio.source {
+                LocalSource::YouTube(url) => Source::YouTube(url.clone()),
             },
+            author: audio.author.clone(),
         }).collect();
         playlist.set_audios(audios).await;
         Ok(())
@@ -106,9 +104,9 @@ impl PlaylistIO<PlaylistIOImpl> for PlaylistIOImpl {
         let playlist_dto = PlaylistDTO {
             audios: audios.iter().map(|audio| AudioDTO {
                 id: audio.id,
-                title: audio.metadata.title.clone(),
-                author: audio.metadata.author.clone(),
-                source: match &audio.metadata.source {
+                title: audio.title.clone(),
+                author: audio.author.clone(),
+                source: match &audio.source {
                     Source::YouTube(url) => LocalSource::YouTube(url.clone()),
                 },
             }).collect(),
