@@ -4,34 +4,39 @@ use tokio::sync::Mutex;
 use super::{Audio, Source};
 
 #[derive(Debug)]
-pub struct Playlist {
+pub struct Playlist<T: PlaylistIO<T>> {
     audios: Mutex<Vec<Audio>>,
+    io: T,
 }
 
+#[derive(Debug, Clone)]
 pub enum LoadError {
     NotFound,
     Unknown,
 }
 
-pub trait PlaylistIO {
-    fn load(&self) -> Result<Playlist, LoadError>;
-    async fn save(&self, playlist: &Playlist) -> Result<(), LoadError>;
+pub trait PlaylistIO<T: PlaylistIO<T>> {
+    async fn load(&self, playlist: &Playlist<T>) -> Result<(), LoadError>;
+    async fn save(&self, playlist: &Playlist<T>) -> Result<(), LoadError>;
 }
 
-impl Playlist {
-    pub fn new() -> Self {
+impl<T: PlaylistIO<T>> Playlist<T> {
+    pub fn new(io: T) -> Self {
         Self {
             audios: Mutex::new(Vec::new()),
+            io,
         }
     }
 
-    pub fn load<T: PlaylistIO>(io: T) -> Result<Playlist, LoadError> {
-        io.load()
+    pub async fn load(&self) -> Result<(), LoadError> {
+        println!("Playlist loaded");
+        self.io.load(self).await?;
+        Ok(())
     }
 
-    pub async fn save<T: PlaylistIO>(&self, io: T) -> Result<(), LoadError> {
+    pub async fn save(&self) -> Result<(), LoadError> {
         println!("Playlist saved");
-        io.save(self).await
+        self.io.save(self).await
     }
 
     pub async fn add_audio(&self, audio: Audio) {
@@ -49,6 +54,10 @@ impl Playlist {
 
     pub async fn get_audios(&self) -> Vec<Audio> {
         self.audios.lock().await.clone()
+    }
+
+    pub async fn set_audios(&self, audios: Vec<Audio>) {
+        *self.audios.lock().await = audios;
     }
 }
 
@@ -74,33 +83,30 @@ struct PlaylistDTO {
     audios: Vec<AudioDTO>,
 }
 
-impl PlaylistIO for PlaylistIOImpl {
-    fn load(&self) -> Result<Playlist, LoadError> {
+impl PlaylistIO<PlaylistIOImpl> for PlaylistIOImpl {
+    async fn load(&self, playlist: &Playlist<PlaylistIOImpl>) -> Result<(), LoadError> {
         let serialized = std::fs::read_to_string(self.0.clone()).map_err(|_| LoadError::NotFound)?;
         let playlist_dto: PlaylistDTO = serde_json::from_str(&serialized).map_err(|_| LoadError::Unknown)?;
         let audios = playlist_dto.audios.iter().map(|audio| Audio {
             id: audio.id,
-            metadata: super::Metadata {
-                title: audio.title.clone(),
-                source: match &audio.source {
-                    LocalSource::YouTube(url) => Source::YouTube(url.clone()),
-                },
-                author: audio.author.clone(),
+            title: audio.title.clone(),
+            source: match &audio.source {
+                LocalSource::YouTube(url) => Source::YouTube(url.clone()),
             },
+            author: audio.author.clone(),
         }).collect();
-        Ok(Playlist {
-            audios: Mutex::new(audios),
-        })
+        playlist.set_audios(audios).await;
+        Ok(())
     }
 
-    async fn save(&self, playlist: &Playlist) -> Result<(), LoadError> {
+    async fn save(&self, playlist: &Playlist<PlaylistIOImpl>) -> Result<(), LoadError> {
         let audios = playlist.get_audios().await;
         let playlist_dto = PlaylistDTO {
             audios: audios.iter().map(|audio| AudioDTO {
                 id: audio.id,
-                title: audio.metadata.title.clone(),
-                author: audio.metadata.author.clone(),
-                source: match &audio.metadata.source {
+                title: audio.title.clone(),
+                author: audio.author.clone(),
+                source: match &audio.source {
                     Source::YouTube(url) => LocalSource::YouTube(url.clone()),
                 },
             }).collect(),

@@ -3,12 +3,11 @@ use std::{path::Path, sync::Arc};
 use event::{Event, Forwarder};
 use serde::{Deserialize, Serialize};
 
-use crate::{audio::{self, Audio, Source}, downloader::{self, FileDownloader, RequestFiles, Storage}, ytdlp_wrapper::{self, YouTubeContentSource}};
+use crate::{audio::{self, Audio, Playlist, PlaylistIOImpl, Source}, downloader::{self, FileDownloader, RequestFiles, Storage}, ytdlp::{self}};
 
 pub struct AppState {
-    playlist_path: String,
-    ytdlp: ytdlp_wrapper::YtDlp,
-    playlist: audio::Playlist,
+    ytdlp: ytdlp::YtDlp,
+    playlist: audio::Playlist<PlaylistIOImpl>,
     downloader: Arc<FileDownloader>,
     forwarder: Forwarder,
 }
@@ -16,7 +15,7 @@ pub struct AppState {
 #[derive(Debug, Clone)]
 pub enum AppError {
     Downloader(downloader::Error),
-    YtDlp(ytdlp_wrapper::Error),
+    YtDlp(ytdlp::FetchError),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,9 +42,9 @@ impl From<Audio> for IndexedAudioDTO {
     fn from(value: Audio) -> Self {
         Self {
             id: value.id,
-            title: value.metadata.title,
-            author: value.metadata.author,
-            source: match value.metadata.source {
+            title: value.title,
+            author: value.author,
+            source: match value.source {
                 Source::YouTube(url) => AudioSourceDTO::YouTube(url),
             }
         }
@@ -65,11 +64,9 @@ impl ToString for AppError {
                 downloader::Error::Connection => "Connection error".to_string(),
             },
             AppError::YtDlp(err) => match err {
-                ytdlp_wrapper::Error::Unknown => "Unknown error".to_string(),
-                ytdlp_wrapper::Error::NotFound => "Video not found".to_string(),
-                ytdlp_wrapper::Error::PrivateVideo => "Private video".to_string(),
-                ytdlp_wrapper::Error::BadLink => "Bad link".to_string(),
-                ytdlp_wrapper::Error::NotAudio => "Not audio".to_string(),
+                ytdlp::FetchError::Unknown => "Unknown error".to_string(),
+                ytdlp::FetchError::NotFound => "Video not found".to_string(),
+                ytdlp::FetchError::BadLink => "Bad link".to_string(),
             },
         }
     }
@@ -98,40 +95,34 @@ impl AppState {
                 fs::set_permissions(ytdlp_path.clone(), metadata).unwrap();
             }
         }
-        let ytdlp_wrapper = ytdlp_wrapper::YtDlp::new(ytdlp_path);
+        let ytdlp = ytdlp::YtDlp::new(ytdlp_path);
         let playlist_path = Path::new(&config_dir).join("playlist.json");
-        let playlist;
-        match audio::Playlist::load(audio::PlaylistIOImpl(playlist_path.to_str().unwrap().to_string())) {
-            Ok(loaded) => {
-                playlist = loaded;
-            },
-            Err(_) => {
-                playlist = audio::Playlist::new();
-            },
-        }
+        let playlist = tokio::runtime::Runtime::new().unwrap().block_on(async {
+            let playlist = Playlist::new(audio::PlaylistIOImpl(playlist_path.to_str().unwrap().to_string()));
+            playlist.load().await.unwrap();
+            playlist
+        });
         let audio_dir = Path::new(&config_dir).join("audios").to_str().unwrap().to_string();
         let downloading_dir = Path::new(&config_dir).join("downloading").to_str().unwrap().to_string();
         Self {
             downloader: Arc::new(FileDownloader::new(audio_dir, downloading_dir)),
-            playlist_path: playlist_path.to_str().unwrap().to_string(),
-            ytdlp: ytdlp_wrapper,
+            ytdlp,
             playlist,
             forwarder,
         }
     }
 
     pub async fn add_new_audio(&self, url: String) -> Result<IndexedAudioDTO, AppError> {
-        let metadata = self.ytdlp.fetch(url.clone()).await.map_err(AppError::YtDlp)?;
-        let content = metadata.get_content().map_err(AppError::YtDlp)?;
-        let audio = audio::Audio::create(metadata.title, metadata.channel, audio::Source::YouTube(format!("https://www.youtube.com/watch?v={}", metadata.id)));
+        let details = self.ytdlp.fetch(url.clone()).await.map_err(AppError::YtDlp)?;
+        let audio = audio::Audio::create(details.title, details.author, audio::Source::YouTube(details.url.clone()));
         self.playlist.add_audio(audio.clone()).await;
         self.save_playlist().await;
-        self.download_audio(audio.clone(), content.clone());
+        self.download_audio(audio.clone(), details.thumbnail, details.media);
         Ok(audio.into())
     }
 
     pub async fn save_playlist(&self) {
-        let _ = self.playlist.save(audio::PlaylistIOImpl(self.playlist_path.clone())).await;
+        let _ = self.playlist.save().await;
     }
 
     pub async fn remove_audio(&self, id: u32) {
@@ -140,7 +131,7 @@ impl AppState {
         let _ = self.downloader.remove(id).await;
     }
 
-    pub fn download_audio(&self, audio: audio::Audio, content: YouTubeContentSource) {
+    pub fn download_audio(&self, audio: audio::Audio, thumbnail: String, media: String) {
         let downloader = self.downloader.clone();
         let forwarder = self.forwarder.clone();
         tokio::spawn(async move {
@@ -154,7 +145,7 @@ impl AppState {
                 async move {
                     forwarder.forward_event(Event::Download { audio: audio.into(), downloaded, total, });
                 }
-            }, RequestFiles::new(content.thumbnail, content.media)).await;
+            }, RequestFiles::new(thumbnail, media)).await;
             if result.is_ok() {
                 forwarder.forward_event(Event::FinishedDownload { audio: audio.into() });
             } else if let Err(err) = result {
@@ -169,11 +160,11 @@ impl AppState {
         for audio in audios.iter()  {
             indexed_audios.push(IndexedAudioDTO {
                 id: audio.id,
-                author: audio.metadata.author.clone(),
-                source: match &audio.metadata.source {
+                author: audio.author.clone(),
+                source: match &audio.source {
                     Source::YouTube(youtube) => AudioSourceDTO::YouTube(youtube.clone()),
                 },
-                title: audio.metadata.title.clone(),
+                title: audio.title.clone(),
             });
         }
         Ok(indexed_audios)
@@ -185,11 +176,10 @@ impl AppState {
             let content = self.downloader.get_files(&audio).await.map_err(AppError::Downloader)?;
             Ok(ContentDTO::Local { bytes: content.thumbnail, mime: content.thumbnail_mime })
         } else {
-            match &audio.metadata.source {
+            match &audio.source {
                 Source::YouTube(url) => {
-                    let metadata = self.ytdlp.fetch(url.clone()).await.map_err(AppError::YtDlp)?;
-                    let content = metadata.get_content().map_err(AppError::YtDlp)?;
-                    Ok(ContentDTO::Url(content.thumbnail))
+                    let details = self.ytdlp.fetch(url.clone()).await.map_err(AppError::YtDlp)?;
+                    Ok(ContentDTO::Url(details.thumbnail))
                 },
             }
         }
@@ -201,12 +191,11 @@ impl AppState {
             let content = self.downloader.get_files(&audio).await.map_err(AppError::Downloader)?;
             Ok(ContentDTO::Local { bytes: content.media, mime: content.media_mime })
         } else {
-            match &audio.metadata.source {
+            match &audio.source {
                 Source::YouTube(url) => {
-                    let metadata = self.ytdlp.fetch(url.clone()).await.map_err(AppError::YtDlp)?;
-                    let content = metadata.get_content().map_err(AppError::YtDlp)?;
-                    self.download_audio(audio, content.clone());
-                    Ok(ContentDTO::Url(content.media))
+                    let details = self.ytdlp.fetch(url.clone()).await.map_err(AppError::YtDlp)?;
+                    self.download_audio(audio, details.thumbnail, details.media.clone());
+                    Ok(ContentDTO::Url(details.media))
                 },
             }
         }

@@ -97,7 +97,12 @@ export default class Engine {
                     listener(payload.StartDownload);
                 }
             } else if (payload.FinishedDownload) {
-                this._downloads[payload.FinishedDownload.audio.id].state = 'finished';
+                this._downloads[payload.FinishedDownload.audio.id] = {
+                    state: 'finished',
+                    error: null,
+                    progress: undefined,
+                    audio: payload.FinishedDownload.audio,
+                }
                 for (const listener of this.listeners['download']) {
                     listener(payload.FinishedDownload);
                 }
@@ -112,9 +117,14 @@ export default class Engine {
                     listener(payload.ErrorDownload);
                 }
             } else if (payload.Download) {
-                this._downloads[payload.Download.audio.id].progress = {
-                    total: payload.Download.total,
-                    downloaded: payload.Download.downloaded,
+                this._downloads[payload.Download.audio.id] = {
+                    state: 'downloading',
+                    error: null,
+                    progress: {
+                        downloaded: payload.Download.downloaded,
+                        total: payload.Download.total,
+                    },
+                    audio: payload.Download.audio,
                 }
                 for (const listener of this.listeners['download']) {
                     listener(payload.Download);
@@ -221,6 +231,20 @@ type ContextType = {
 
 const Context = createContext<ContextType | undefined>(undefined);
 
+export class FetchAudioError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = "FetchAudioError";
+    }
+}
+
+export class NotFoundError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = "NotFoundError";
+    }
+}
+
 export function EngineContext({children}: {children: ReactNode}) {
     let [engine, setEngine] = useState<Engine>(new Engine());
     let [playlist, setPlaylist] = useState<IndexedAudioDTO[]>([]);
@@ -254,9 +278,20 @@ export function EngineContext({children}: {children: ReactNode}) {
         thumbnails,
         addAudio: async (url: string) => {
             setState('fetching_audio');
-            await engine.addAudio(url);
-            setPlaylist(engine.playlist);
-            setState('idle');
+            try {
+                await engine.addAudio(url);
+                setPlaylist(engine.playlist);
+                setState('idle');
+            } catch (error) {
+                setState('idle');
+                if (error === 'Bad link') {
+                    throw new FetchAudioError("The link provided is not a valid link");
+                } else if (error === 'Not found') {
+                    throw new NotFoundError("The link provided does not point to a valid audio");
+                } else {
+                    throw error;
+                }
+            }
         },
         removeAudio: async (id: number) => {
             await engine.removeAudio(id);
