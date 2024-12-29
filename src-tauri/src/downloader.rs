@@ -50,7 +50,6 @@ impl ContentRetriever for DefaultContentRetriever {
         while let Some(chunk) = response.chunk().await.map_err(|_| Error::Connection)? {
             writer.write_all(&chunk).map_err(|_| Error::Unknown)?;
             length += chunk.len() as u64;
-            println!("Downloaded {} bytes / {} bytes", length, size);
             if !callback(length, size).await {
                 return Err(Error::Canceled);
             }
@@ -147,8 +146,7 @@ impl FileDownloader {
         let mut file = tokio::fs::File::create(downloading_dir.join(filename)).await.map_err(|_| Error::Unknown)?;
         let mut bytes = Vec::new();
         let mut result = Err(Error::Unknown);
-        for attempt in 0..5 {
-            println!("Attempt: {}", attempt);
+        for _attempt in 0..5 {
             let len = bytes.len();
             result = self.content_retriever.download(url.clone(), &mut bytes, |downloaded, total| {
                 let callback = &callback;
@@ -205,7 +203,6 @@ impl Storage for FileDownloader {
         self.push_queue(audio.id).await?;
         let result = self.download_files(audio, callback, downloads).await;
         self.anyway_pop_queue(audio.id).await;
-        println!("Donwloaded end by {:?}", result.clone().err());
         result
     }
     

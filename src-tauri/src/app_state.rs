@@ -1,17 +1,20 @@
 use std::{path::Path, sync::Arc};
 
+use event::{Event, Forwarder};
 use serde::{Deserialize, Serialize};
+use tauri::webview::DownloadEvent;
 
-use crate::{audio::{self, Source}, downloader::{self, FileDownloader, RequestFiles, Storage}, ytdlp_wrapper::{self, YouTubeContentSource}};
+use crate::{audio::{self, Audio, Source}, downloader::{self, FileDownloader, RequestFiles, Storage}, ytdlp_wrapper::{self, YouTubeContentSource}};
 
 pub struct AppState {
     playlist_path: String,
     ytdlp: ytdlp_wrapper::YtDlp,
     playlist: audio::Playlist,
     downloader: Arc<FileDownloader>,
+    forwarder: Forwarder,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AppError {
     Downloader(downloader::Error),
     YtDlp(ytdlp_wrapper::Error),
@@ -37,6 +40,21 @@ pub struct IndexedAudioDTO {
     source: AudioSourceDTO,
 }
 
+impl From<Audio> for IndexedAudioDTO {
+    fn from(value: Audio) -> Self {
+        Self {
+            id: value.id,
+            title: value.metadata.title,
+            author: value.metadata.author,
+            source: match value.metadata.source {
+                Source::YouTube(url) => AudioSourceDTO::YouTube(url),
+            }
+        }
+    }
+}
+
+pub mod event;
+
 impl ToString for AppError {
     fn to_string(&self) -> String {
         match self {
@@ -59,7 +77,7 @@ impl ToString for AppError {
 }
 
 impl AppState {
-    pub fn new() -> Self {
+    pub fn new(forwarder: Forwarder) -> Self {
         let is_portable = std::env::var("PORTABLE").is_ok();
         let config_dir = if is_portable {
             std::env::current_exe().unwrap().parent().unwrap().to_str().unwrap().to_string()
@@ -85,6 +103,7 @@ impl AppState {
             playlist_path: playlist_path.to_str().unwrap().to_string(),
             ytdlp: ytdlp_wrapper,
             playlist,
+            forwarder,
         }
     }
 
@@ -95,14 +114,7 @@ impl AppState {
         self.playlist.add_audio(audio.clone()).await;
         self.save_playlist().await;
         self.download_audio(audio.clone(), content.clone());
-        Ok(IndexedAudioDTO {
-            id: audio.id,
-            title: audio.metadata.title.clone(),
-            author: audio.metadata.author,
-            source: match &audio.metadata.source {
-                Source::YouTube(url) => AudioSourceDTO::YouTube(url.clone()),
-            },
-        })
+        Ok(audio.into())
     }
 
     pub async fn save_playlist(&self) {
@@ -117,8 +129,24 @@ impl AppState {
 
     pub fn download_audio(&self, audio: audio::Audio, content: YouTubeContentSource) {
         let downloader = self.downloader.clone();
+        let forwarder = self.forwarder.clone();
         tokio::spawn(async move {
-            let _ = downloader.save(&audio, |_, _| {async {}}, RequestFiles::new(content.thumbnail, content.media)).await;
+            if downloader.is_in_queue(audio.id).await {
+                return;
+            }
+            forwarder.forward_event(Event::StartDownload { audio: audio.clone().into() });
+            let result = downloader.save(&audio, |downloaded, total| {
+                let forwarder = forwarder.clone();
+                let audio = audio.clone();
+                async move {
+                    forwarder.forward_event(Event::Download { audio: audio.into(), downloaded, total, });
+                }
+            }, RequestFiles::new(content.thumbnail, content.media)).await;
+            if result.is_ok() {
+                forwarder.forward_event(Event::FinishedDownload { audio: audio.into() });
+            } else if let Err(err) = result {
+                forwarder.forward_event(Event::ErrorDownload { audio: audio.into(), error: AppError::Downloader(err) });
+            }
         });
     }
 

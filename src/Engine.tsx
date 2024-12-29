@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core"
+import { listen } from "@tauri-apps/api/event"
 import { createContext, ReactNode, useContext, useEffect, useState } from "react"
 
 export type ContentDTO = {
@@ -18,48 +19,101 @@ export type IndexedAudioDTO = {
     },
 }
 
-
-export async function getPlaylistMetadata(): Promise<IndexedAudioDTO[]> {
-    return await invoke("get_playlist");
-}
-
-export async function addNewAudio(url: string): Promise<IndexedAudioDTO> {
-    try {
-        return await invoke("add_new_audio", { url });
-    } catch (e) {
-        console.log(e);
-    }
-}
-
-export async function removeAudio(id: number) {
-    return await invoke("remove_audio", { id });
-}
-
-export async function getMedia(id: number): Promise<ContentDTO> {
-    return await invoke("get_media", { id });
-}
-
-export async function getThumbnail(id: number): Promise<ContentDTO> {
-    return await invoke("get_thumbnail", { id });
-}
-
 export type ThumbnailEvent = {
     id: number,
     url: string,
     currentThumbnails: {[id: number]: string},
 }
 
+export type ProcessDownloadEvent = {
+    audio: IndexedAudioDTO,
+}
+
+export type PartDownloadEvent = ProcessDownloadEvent & {
+    total: number,
+    downloaded: number,
+}
+
+
+type DownloadEventDTO = {
+    StartDownload?: {
+        audio: IndexedAudioDTO,
+    },
+    FinishedDownload?: {
+        audio: IndexedAudioDTO,
+    },
+    ErrorDownload?: {
+        audio: IndexedAudioDTO,
+        error: string,
+    },
+    Download?: {
+        audio: IndexedAudioDTO,
+        downloaded: number,
+        total: number,
+    }
+}
+
+export type Download = {
+    state: 'downloading' | 'finished' | 'error',
+    error: string | null,
+    progress: {
+        total: number,
+        downloaded: number,
+    } | undefined;
+}
+
 export default class Engine {
     private listeners: {[type: string]: ((e: any)=>void)[]};
-    private playlist: IndexedAudioDTO[];
+    private _playlist: IndexedAudioDTO[];
     private thumbnails: {[id: number]: ContentDTO};
+    private _downloads: {[id: number]: Download};
 
     constructor() {
         this.listeners = {
             'thumbnail_load': [],
+            'download_start': [],
+            'download_finished': [],
+            'download': [],
         };
-        this.playlist = [];
+        this._playlist = [];
         this.thumbnails = {};
+        this._downloads = {};
+
+        listen('download', (e) => {
+            let payload: DownloadEventDTO = e.payload;
+            if (payload.StartDownload) {
+                this._downloads[payload.StartDownload.audio.id] = {
+                    state: 'downloading',
+                    error: null,
+                    progress: undefined,
+                };
+                for (const listener of this.listeners['download_start']) {
+                    listener(payload.StartDownload);
+                }
+            } else if (payload.FinishedDownload) {
+                this._downloads[payload.FinishedDownload.audio.id].state = 'finished';
+                for (const listener of this.listeners['download_finished']) {
+                    listener(payload.FinishedDownload);
+                }
+            } else if (payload.ErrorDownload) {
+                this._downloads[payload.ErrorDownload.audio.id] = {
+                    state: 'error',
+                    error: payload.ErrorDownload.error,
+                    progress: undefined
+                };
+                for (const listener of this.listeners['download_finished']) {
+                    listener(payload.ErrorDownload);
+                }
+            } else if (payload.Download) {
+                this._downloads[payload.Download.audio.id].progress = {
+                    total: payload.Download.total,
+                    downloaded: payload.Download.downloaded,
+                }
+                for (const listener of this.listeners['download']) {
+                    listener(payload.Download);
+                }
+            }
+        });
     }
 
     private contentToURL(content: ContentDTO): string {
@@ -98,18 +152,18 @@ export default class Engine {
     }
 
     async getPlaylist(): Promise<IndexedAudioDTO[]> {
-        this.playlist = await invoke("get_playlist_metadata");
+        this._playlist = await invoke("get_playlist");
         this.thumbnails = {};
-        for (const audio of this.playlist) {
+        for (const audio of this._playlist) {
             this.loadThumbnail(audio.id);
         }
-        return this.playlist;
+        return this._playlist;
     }
 
     async addAudio(url: string): Promise<IndexedAudioDTO> {
         let audio: IndexedAudioDTO = await invoke("add_new_audio", { url });
         this.loadThumbnail(audio.id);
-        this.playlist.push(audio);
+        this._playlist.push(audio);
         return audio;
     }
 
@@ -127,13 +181,16 @@ export default class Engine {
 
     async removeAudio(id: number) {
         await invoke("remove_audio", { id });
-        this.playlist = this.playlist.filter((audio) => audio.id !== id);
+        this._playlist = this._playlist.filter((audio) => audio.id !== id);
     }
 
-    get just_playlist(): IndexedAudioDTO[] {
-        return [...this.playlist];
+    get playlist(): IndexedAudioDTO[] {
+        return [...this._playlist];
     }
-    
+
+    get downloads(): {[id: number]: Download} {
+        return {...this._downloads};
+    }
 }
 
 type State = 'idle' | 'fetching_audio' | 'loading_audio';
@@ -157,6 +214,61 @@ export function EngineContext({children}: {children: ReactNode}) {
     let [thumbnails, setThumbnails] = useState<{[id: number]: string}>({});
     let [selectedAudio, setSelectedAudio] = useState<[IndexedAudioDTO, string] | null>(null);
     let [state, setState] = useState<State>('idle');
+    let [downloads, setDownloads] = useState<{[id: number]: Download}>({});
+    
+    useEffect(() => {
+        return engine.on('download_start', (e: ProcessDownloadEvent) => {
+            setDownloads((prev) => ({
+                ...prev,
+                [e.audio.id]: {
+                    state: 'downloading',
+                    error: null,
+                    progress: undefined,
+                }
+            }));
+        });
+    }, [engine]);
+
+    useEffect(() => {
+        return engine.on('download_finished', (e: ProcessDownloadEvent) => {
+            setDownloads((prev) => ({
+                ...prev,
+                [e.audio.id]: {
+                    ...prev[e.audio.id],
+                    state: 'finished',
+                }
+            }));
+        });
+    }, [engine]);
+
+    useEffect(() => {
+        return engine.on('download', (e: PartDownloadEvent) => {
+            setDownloads((prev) => ({
+                ...prev,
+                [e.audio.id]: {
+                    ...prev[e.audio.id],
+                    progress: {
+                        total: e.total,
+                        downloaded: e.downloaded,
+                    }
+                }
+            }));
+        });
+    }, [engine]);
+
+    useEffect(() => {
+        return engine.on('download_error', (e: ProcessDownloadEvent & { error: string }) => {
+            setDownloads((prev) => ({
+                ...prev,
+                [e.audio.id]: {
+                    state: 'error',
+                    error: e.error,
+                    progress: undefined,
+                }
+            }));
+        });
+    }, [engine]);
+
     useEffect(() => {
         engine.getPlaylist().then(setPlaylist);
     }, []);
@@ -172,19 +284,19 @@ export function EngineContext({children}: {children: ReactNode}) {
         addAudio: async (url: string) => {
             setState('fetching_audio');
             await engine.addAudio(url);
-            setPlaylist(engine.just_playlist);
+            setPlaylist(engine.playlist);
             setState('idle');
         },
         removeAudio: async (id: number) => {
             await engine.removeAudio(id);
-            setPlaylist(engine.just_playlist);
+            setPlaylist(engine.playlist);
         },
         state,
         selectedAudio,
         selectAudio: async (id: number) => {
             setState('loading_audio');
             let media = await engine.getMedia(id);
-            let audio = engine.just_playlist.find(audio => audio.id === id);
+            let audio = engine.playlist.find(audio => audio.id === id);
             if (audio) {
                 setSelectedAudio([audio, media]);
             }

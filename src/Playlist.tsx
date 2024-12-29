@@ -3,7 +3,7 @@ import { Thumbnail } from "./components/Thumbnail";
 
 export function Playlist() {
     let { thumbnails, playlist, state, removeAudio, selectAudio, selectedAudio } = useEngine();
-    return <ul className="flex-grow flex flex-col space-y-2 bg-gray-800 p-2 rounded-xl overflow-auto">
+    return <ul className="flex flex-col space-y-2 bg-gray-800 p-2 rounded-xl overflow-y-auto min-h-0 playlist h-full">
         {playlist.map((audio, index) => (<li key={index} className={"flex last:border-b-0 border-b border-gray-700 p-2 hover:bg-gray-700 rounded transition-all " + ((selectedAudio && selectedAudio[0].id == audio.id) && "bg-gray-700")}>
             <button className="flex items-center space-x-2 flex-grow text-left" onClick={() => selectAudio(audio.id)}>
                 { (thumbnails == null || !(audio.id in thumbnails)) && (<div className="w-14 h-14 bg-gray-600 rounded animate-pulse"></div>)}

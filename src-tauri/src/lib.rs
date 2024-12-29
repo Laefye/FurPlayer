@@ -1,7 +1,7 @@
 
 use std::sync::Arc;
 
-use app_state::{AppState, ContentDTO, IndexedAudioDTO};
+use app_state::{event::WebviewForwarder, AppState, ContentDTO, IndexedAudioDTO};
 use tauri::{Manager, State};
 
 mod app_state;
@@ -47,7 +47,8 @@ async fn get_media(state: State<'_, Arc<AppState>>, id: u32) -> Result<ContentDT
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
-            app.manage(Arc::new(AppState::new()));
+            let webview_forwarder = WebviewForwarder::new(app.get_webview_window("main").unwrap());
+            app.manage(Arc::new(AppState::new(Arc::new(webview_forwarder))));
             Ok(())
         })
         .plugin(tauri_plugin_opener::init())

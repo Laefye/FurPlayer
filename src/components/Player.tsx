@@ -14,7 +14,7 @@ export function Player() {
     }, [selectedAudio]);
 
     return (
-        <div className="bg-gray-800 p-4 rounded-xl flex items-center space-x-4">
+        <div className="bg-gray-800 p-4 rounded-xl flex items-center space-x-4 player">
             {selectedAudio ? (
                 <>
                     {selectedAudio[0].id in thumbnails ? (

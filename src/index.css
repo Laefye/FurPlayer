@@ -1,3 +1,23 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+.app {
+    display: grid; 
+    grid-template-columns: 2fr 1fr; 
+    grid-template-rows: min-content 1fr min-content; 
+    gap: 0.5rem 0.5rem; 
+    grid-template-areas: 
+      "search search"
+      "playlist downloads"
+      "player player"; 
+}
+  
+.search { grid-area: search; }
+
+.playlist { grid-area: playlist; }
+
+.downloads { grid-area: downloads; }
+
+.player { grid-area: player; }
+

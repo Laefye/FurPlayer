@@ -24,7 +24,7 @@ pub struct YouTubeFormat {
     pub resolution: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Error {
     Unknown,
     NotFound,
