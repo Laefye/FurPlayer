@@ -3,13 +3,12 @@ import { useEngine } from "../Engine";
 export function DownloadList() {
     const { playlist, engine } = useEngine();
     let downloads = engine.downloads;
-    
-    return (
-        <div className="bg-gray-800 p-4 rounded-xl downloads">
-            <h2 className="text-lg font-bold mb-4">Downloads</h2>
+    return <div className="flex flex-col min-h-0 downloads">
+        <h2 className="text-lg mb-2">Downloads</h2>
+        <div className="bg-gray-800 p-4 rounded-xl flex-grow min-h-0 overflow-auto">
             <ul className="space-y-2">
                 {Object.entries(downloads).map(([id, download]) => {
-                    const audio = playlist.find((audio) => audio.id === parseInt(id));
+                    const audio = download.audio;
                     return (
                         <li key={id} className="flex flex-col space-y-1">
                             <span className="font-semibold">{audio?.title}</span>
@@ -35,5 +34,5 @@ export function DownloadList() {
                 })}
             </ul>
         </div>
-    );
+    </div>;
 }

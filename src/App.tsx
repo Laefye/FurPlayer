@@ -11,9 +11,9 @@ function App() {
   let engine = useEngine();
 
   return (
-    <main className="bg-gray-900 h-screen text-white p-2 app flex flex-col space-y-2">
-      <form onSubmit={(e) => {e.preventDefault(); engine.addAudio(url);}} className="flex space-x-2 search">
-        <input type="url" onChange={(e) => setUrl(e.target.value)} className="w-full bg-gray-800 p-2 rounded-xl" placeholder="Enter a youtube URL"/>
+    <main className="bg-gray-900 h-screen text-white p-2 app flex flex-col">
+      <form onSubmit={(e) => {e.preventDefault(); engine.addAudio(url);}} className="flex search">
+        <input type="url" onChange={(e) => setUrl(e.target.value)} className="outline-none w-full bg-gray-800 p-2 px-3 rounded-xl" placeholder="Enter a youtube URL"/>
       </form>
       <Playlist/>
       <DownloadList/>

@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core"
-import { listen } from "@tauri-apps/api/event"
+import { listen, UnlistenFn } from "@tauri-apps/api/event"
 import { createContext, ReactNode, useContext, useEffect, useState } from "react"
 
 export type ContentDTO = {
@@ -60,6 +60,7 @@ export type Download = {
         total: number,
         downloaded: number,
     } | undefined;
+    audio: IndexedAudioDTO,
 }
 
 export default class Engine {
@@ -68,40 +69,46 @@ export default class Engine {
     private thumbnails: {[id: number]: ContentDTO};
     private _downloads: {[id: number]: Download};
 
+    private _drop: Promise<UnlistenFn>;
+
     constructor() {
         this.listeners = {
             'thumbnail_load': [],
-            'download_start': [],
-            'download_finished': [],
             'download': [],
         };
         this._playlist = [];
         this.thumbnails = {};
         this._downloads = {};
 
-        listen('download', (e) => {
+        
+    }
+
+    init() {
+        this._drop = listen('download', (e) => {
             let payload: DownloadEventDTO = e.payload;
             if (payload.StartDownload) {
                 this._downloads[payload.StartDownload.audio.id] = {
                     state: 'downloading',
                     error: null,
                     progress: undefined,
+                    audio: payload.StartDownload.audio,
                 };
-                for (const listener of this.listeners['download_start']) {
+                for (const listener of this.listeners['download']) {
                     listener(payload.StartDownload);
                 }
             } else if (payload.FinishedDownload) {
                 this._downloads[payload.FinishedDownload.audio.id].state = 'finished';
-                for (const listener of this.listeners['download_finished']) {
+                for (const listener of this.listeners['download']) {
                     listener(payload.FinishedDownload);
                 }
             } else if (payload.ErrorDownload) {
                 this._downloads[payload.ErrorDownload.audio.id] = {
                     state: 'error',
                     error: payload.ErrorDownload.error,
-                    progress: undefined
+                    progress: undefined,
+                    audio: payload.ErrorDownload.audio,
                 };
-                for (const listener of this.listeners['download_finished']) {
+                for (const listener of this.listeners['download']) {
                     listener(payload.ErrorDownload);
                 }
             } else if (payload.Download) {
@@ -113,6 +120,12 @@ export default class Engine {
                     listener(payload.Download);
                 }
             }
+        });
+    }
+
+    dispose() {
+        (async() => {
+            (await this._drop)();
         });
     }
 
@@ -217,58 +230,16 @@ export function EngineContext({children}: {children: ReactNode}) {
     let [downloads, setDownloads] = useState<{[id: number]: Download}>({});
     
     useEffect(() => {
-        return engine.on('download_start', (e: ProcessDownloadEvent) => {
-            setDownloads((prev) => ({
-                ...prev,
-                [e.audio.id]: {
-                    state: 'downloading',
-                    error: null,
-                    progress: undefined,
-                }
-            }));
-        });
-    }, [engine]);
+        engine.init();
+        return () => engine.dispose();
+    }, []);
 
     useEffect(() => {
-        return engine.on('download_finished', (e: ProcessDownloadEvent) => {
-            setDownloads((prev) => ({
-                ...prev,
-                [e.audio.id]: {
-                    ...prev[e.audio.id],
-                    state: 'finished',
-                }
-            }));
-        });
-    }, [engine]);
-
-    useEffect(() => {
-        return engine.on('download', (e: PartDownloadEvent) => {
-            setDownloads((prev) => ({
-                ...prev,
-                [e.audio.id]: {
-                    ...prev[e.audio.id],
-                    progress: {
-                        total: e.total,
-                        downloaded: e.downloaded,
-                    }
-                }
-            }));
-        });
-    }, [engine]);
-
-    useEffect(() => {
-        return engine.on('download_error', (e: ProcessDownloadEvent & { error: string }) => {
-            setDownloads((prev) => ({
-                ...prev,
-                [e.audio.id]: {
-                    state: 'error',
-                    error: e.error,
-                    progress: undefined,
-                }
-            }));
-        });
-    }, [engine]);
-
+        return engine.on('download', (e) => {
+            setDownloads(engine.downloads);
+        })
+    }, []);
+    
     useEffect(() => {
         engine.getPlaylist().then(setPlaylist);
     }, []);

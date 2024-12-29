@@ -2,7 +2,6 @@ use std::{path::Path, sync::Arc};
 
 use event::{Event, Forwarder};
 use serde::{Deserialize, Serialize};
-use tauri::webview::DownloadEvent;
 
 use crate::{audio::{self, Audio, Source}, downloader::{self, FileDownloader, RequestFiles, Storage}, ytdlp_wrapper::{self, YouTubeContentSource}};
 
