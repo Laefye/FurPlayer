@@ -9,17 +9,6 @@ export type ContentDTO = {
     }
 }
 
-export type AudioDTO = {
-    id: number,
-    title: string,
-    author: string,
-    source: {
-        YouTube?: string,
-    },
-    thumbnail: ContentDTO,
-    media: ContentDTO,
-}
-
 export type IndexedAudioDTO = {
     id: number,
     title: string,
@@ -31,7 +20,7 @@ export type IndexedAudioDTO = {
 
 
 export async function getPlaylistMetadata(): Promise<IndexedAudioDTO[]> {
-    return await invoke("get_playlist_metadata");
+    return await invoke("get_playlist");
 }
 
 export async function addNewAudio(url: string): Promise<IndexedAudioDTO> {

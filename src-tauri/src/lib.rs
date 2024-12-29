@@ -20,7 +20,7 @@ async fn add_new_audio(state: State<'_, Arc<AppState>>, url: String) -> Result<I
 }
 
 #[tauri::command]
-async fn get_playlist_metadata(state: State<'_, Arc<AppState>>) -> Result<Vec<IndexedAudioDTO>, String> {
+async fn get_playlist(state: State<'_, Arc<AppState>>) -> Result<Vec<IndexedAudioDTO>, String> {
     state.get_all_audios().await.map_err(|e| e.to_string())
 }
 
@@ -51,7 +51,7 @@ pub fn run() {
             Ok(())
         })
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![add_new_audio, get_playlist_metadata, remove_audio, get_media, get_thumbnail])
+        .invoke_handler(tauri::generate_handler![add_new_audio, get_playlist, remove_audio, get_media, get_thumbnail])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

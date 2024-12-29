@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import { AudioDTO, getThumbnail, IndexedAudioDTO, ThumbnailEvent, useEngine } from "./Engine";
+import { useEngine } from "./Engine";
 import { Thumbnail } from "./components/Thumbnail";
 
 export function Playlist() {
