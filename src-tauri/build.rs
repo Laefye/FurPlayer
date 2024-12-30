@@ -9,7 +9,7 @@ fn download_ytdlp() {
     {
         #[cfg(target_os = "windows")]
         {
-            url = "https://github.com/yt-dlp/yt-dlp/releases/download/2024.12.23/yt-dlp.exe";
+            url = "https://github.com/yt-dlp/yt-dlp/releases/download/2024.12.23/yt-dlp_x86.exe";
             filename = "yt-dlp.exe";
         }
         #[cfg(target_os = "linux")]
@@ -17,6 +17,11 @@ fn download_ytdlp() {
             url = "https://github.com/yt-dlp/yt-dlp/releases/download/2024.12.23/yt-dlp_linux";
             filename = "yt-dlp_linux";
         }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        url = "https://github.com/yt-dlp/yt-dlp/releases/download/2024.12.23/yt-dlp_macos";
+        filename = "yt-dlp_macos";
     }
     let real_path = format!(".ytdlp/{}", filename);
     if !fs::exists(&real_path).unwrap() {

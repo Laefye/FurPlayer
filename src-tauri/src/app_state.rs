@@ -85,15 +85,24 @@ impl AppState {
         {
             #[cfg(target_os = "windows")]
             {
-                ytdlp_path = Self::install_binary(app_dir.clone(), "yt-dlp.exe".to_string(), binaries::YTDLP);
+                ytdlp_path = Self::install_binary(app_dir.clone(), "yt-dlp_x86.exe".to_string(), binaries::YTDLP);
             }
             #[cfg(target_os = "linux")]
             {
                 ytdlp_path = Self::install_binary(app_dir.clone(), "yt-dlp_linux".to_string(), binaries::YTDLP);
-                let mut metadata = fs::metadata(ytdlp_path.clone()).unwrap().permissions();
-                metadata.set_mode(0o775);
-                fs::set_permissions(ytdlp_path.clone(), metadata).unwrap();
             }
+        }
+        #[cfg(target_os = "macos")]
+        {
+            ytdlp_path = Self::install_binary(app_dir.clone(), "yt-dlp_macos".to_string(), binaries::YTDLP); 
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            use std::fs;
+            use std::os::unix::fs::PermissionsExt;
+            let mut permissions = fs::metadata(&ytdlp_path).unwrap().permissions();
+            permissions.set_mode(0o775);
+            fs::set_permissions(&ytdlp_path, permissions).unwrap();
         }
         let ytdlp = ytdlp::YtDlp::new(ytdlp_path);
         let playlist_path = Path::new(&app_dir).join("playlist.json");
