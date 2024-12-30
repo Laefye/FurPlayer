@@ -1,5 +1,8 @@
 use std::{path::Path, sync::Arc};
 
+#[cfg(target_os = "linux")]
+use std::os::unix::fs::PermissionsExt;
+
 use event::{Event, Forwarder};
 use serde::{Deserialize, Serialize};
 
