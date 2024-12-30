@@ -24,6 +24,12 @@ jobs:
       with:
         node-version: '22'
 
+    - name: Install dependencies on Ubuntu
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt update
+        sudo apt install -y libwebkit2gtk-4.1-dev libappindicator3-dev libssl-dev build-essential librsvg2-dev libxdo-dev wget curl libgtk-3-dev
+
     - name: Install Node.js dependencies
       run: npm install
 

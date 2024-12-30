@@ -1,5 +1,8 @@
 use std::{path::Path, sync::Arc};
 
+#[cfg(target_os = "linux")]
+use std::os::unix::fs::PermissionsExt;
+
 use event::{Event, Forwarder};
 use serde::{Deserialize, Serialize};
 
@@ -90,9 +93,9 @@ impl AppState {
             #[cfg(target_os = "linux")]
             {
                 ytdlp_path = Self::install_binary(app_dir.clone(), "yt-dlp_linux".to_string(), binaries::YTDLP);
-                let mut metadata = fs::metadata(ytdlp_path.clone()).unwrap().permissions();
+                let mut metadata = std::fs::metadata(ytdlp_path.clone()).unwrap().permissions();
                 metadata.set_mode(0o775);
-                fs::set_permissions(ytdlp_path.clone(), metadata).unwrap();
+                std::fs::set_permissions(ytdlp_path.clone(), metadata).unwrap();
             }
         }
         let ytdlp = ytdlp::YtDlp::new(ytdlp_path);
