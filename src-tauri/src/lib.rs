@@ -8,6 +8,7 @@ mod app_state;
 mod audio;
 mod ytdlp;
 mod downloader;
+mod binaries;
 
 
 #[tauri::command]

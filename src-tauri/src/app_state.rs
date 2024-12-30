@@ -3,7 +3,7 @@ use std::{path::Path, sync::Arc};
 use event::{Event, Forwarder};
 use serde::{Deserialize, Serialize};
 
-use crate::{audio::{self, Audio, Playlist, PlaylistIOImpl, Source}, downloader::{self, FileDownloader, RequestFiles, Storage}, ytdlp::{self}};
+use crate::{audio::{self, Audio, Playlist, PlaylistIOImpl, Source}, binaries, downloader::{self, FileDownloader, RequestFiles, Storage}, ytdlp::{self}};
 
 pub struct AppState {
     ytdlp: ytdlp::YtDlp,
@@ -75,7 +75,7 @@ impl ToString for AppError {
 impl AppState {
     pub fn new(forwarder: Forwarder) -> Self {
         let is_portable = std::env::var("PORTABLE").is_ok();
-        let config_dir = if is_portable {
+        let app_dir = if is_portable {
             std::env::current_exe().unwrap().parent().unwrap().to_str().unwrap().to_string()
         } else {
             dirs::config_dir().unwrap().join("FurPlayer").to_str().unwrap().to_string()
@@ -85,31 +85,41 @@ impl AppState {
         {
             #[cfg(target_os = "windows")]
             {
-                ytdlp_path = std::env::current_exe().unwrap().parent().unwrap().to_path_buf().join("utils").join("yt-dlp.exe").to_str().unwrap().to_string();
+                ytdlp_path = Self::install_binary(app_dir.clone(), "yt-dlp.exe".to_string(), binaries::YTDLP);
             }
             #[cfg(target_os = "linux")]
             {
-                ytdlp_path = std::env::current_exe().unwrap().parent().unwrap().to_path_buf().join("utils").join("yt-dlp_linux").to_str().unwrap().to_string();
+                ytdlp_path = Self::install_binary(app_dir.clone(), "yt-dlp_linux".to_string(), binaries::YTDLP);
                 let mut metadata = fs::metadata(ytdlp_path.clone()).unwrap().permissions();
                 metadata.set_mode(0o775);
                 fs::set_permissions(ytdlp_path.clone(), metadata).unwrap();
             }
         }
         let ytdlp = ytdlp::YtDlp::new(ytdlp_path);
-        let playlist_path = Path::new(&config_dir).join("playlist.json");
+        let playlist_path = Path::new(&app_dir).join("playlist.json");
         let playlist = tokio::runtime::Runtime::new().unwrap().block_on(async {
             let playlist = Playlist::new(audio::PlaylistIOImpl(playlist_path.to_str().unwrap().to_string()));
             playlist.load().await.unwrap();
             playlist
         });
-        let audio_dir = Path::new(&config_dir).join("audios").to_str().unwrap().to_string();
-        let downloading_dir = Path::new(&config_dir).join("downloading").to_str().unwrap().to_string();
+        let audio_dir = Path::new(&app_dir).join("audios").to_str().unwrap().to_string();
+        let downloading_dir = Path::new(&app_dir).join("downloading").to_str().unwrap().to_string();
         Self {
             downloader: Arc::new(FileDownloader::new(audio_dir, downloading_dir)),
             ytdlp,
             playlist,
             forwarder,
         }
+    }
+
+    fn install_binary(app_dir: String, filename: String, binary: &[u8]) -> String {
+        let path = Path::new(&app_dir).join("bin");
+        let executable_path = path.join(filename);
+        if !executable_path.exists() {
+            std::fs::create_dir_all(&path).unwrap();
+            std::fs::write(&executable_path, binary).unwrap();
+        }
+        executable_path.to_str().unwrap().to_string()
     }
 
     pub async fn add_new_audio(&self, url: String) -> Result<IndexedAudioDTO, AppError> {
