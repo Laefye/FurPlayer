@@ -6,7 +6,7 @@ use std::os::unix::fs::PermissionsExt;
 use event::{Event, Forwarder};
 use serde::{Deserialize, Serialize};
 
-use crate::{audio::{self, Audio, Playlist, PlaylistIOImpl, Source}, binaries, downloader::{self, FileDownloader, RequestFiles, Storage}, ytdlp::{self}};
+use crate::{audio::{self, Audio, Playlist, PlaylistIOImpl, LoadError, Source}, binaries, downloader::{self, FileDownloader, RequestFiles, Storage}, ytdlp::{self}};
 
 pub struct AppState {
     ytdlp: ytdlp::YtDlp,
@@ -102,7 +102,11 @@ impl AppState {
         let playlist_path = Path::new(&app_dir).join("playlist.json");
         let playlist = tokio::runtime::Runtime::new().unwrap().block_on(async {
             let playlist = Playlist::new(audio::PlaylistIOImpl(playlist_path.to_str().unwrap().to_string()));
-            playlist.load().await.unwrap();
+            match playlist.load().await {
+                Err(LoadError::NotFound) => (),
+                Err(e) => panic!("{:?}", e),
+                _ => (),
+            };
             playlist
         });
         let audio_dir = Path::new(&app_dir).join("audios").to_str().unwrap().to_string();

@@ -23,6 +23,7 @@ mod playlist;
 
 pub use playlist::Playlist;
 pub use playlist::PlaylistIOImpl;
+pub use playlist::LoadError;
 
 impl Audio {
     pub fn create(title: String, author: String, source: Source) -> Self {
